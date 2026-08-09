@@ -53,4 +53,7 @@ test("includes complete demo control surfaces", async () => {
   assert.match(source, /고객지원 센터/);
   assert.match(source, /시스템 로그/);
   assert.match(source, /q-target-rules.csv/);
+  assert.match(source, /demo-attachment/);
+  assert.match(source, /compact-mode/);
+  assert.match(source, /selectedTarget/);
 });

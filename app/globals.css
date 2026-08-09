@@ -1,6 +1,7 @@
 @import "tailwindcss";
 
 :root { --navy:#131b2e; --ink:#16161b; --muted:#727581; --line:#c9c8cf; --bg:#fcf9fb; --panel:#fff; --soft:#f4f1f4; --indigo:#4b4de2; --red:#c31518; }
+.interactive-controls{display:flex;align-items:center;gap:8px}.interactive-controls label{font-size:12px;color:var(--muted)}.interactive-controls select,.rule-create input,.case-modal input,.case-modal select{margin-left:5px;border:1px solid var(--line);border-radius:4px;padding:8px;background:#fff;color:var(--ink)}.rule-create{display:flex;gap:8px;margin:0 0 16px}.rule-create input{margin:0;flex:1}.rule-status{border:0;background:transparent;padding:0}.case-modal{position:relative;width:min(480px,92vw);padding:30px;background:#fff;border-radius:8px;box-shadow:0 20px 70px rgba(0,0,0,.25)}.case-modal label{display:block;margin-top:18px;font-weight:700}.case-modal input,.case-modal select{display:block;width:100%;margin:8px 0 0}.case-modal footer{display:flex;justify-content:flex-end;gap:10px;margin-top:26px}.case-modal footer button{padding:10px 16px}
 * { box-sizing:border-box; }
 body { margin:0; background:var(--bg); color:var(--ink); font-family:Arial, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif; font-size:14px; }
 button, input, textarea { font:inherit; } button { cursor:pointer; } .platform { min-height:100vh; display:flex; background:var(--bg); }

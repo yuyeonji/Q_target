@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFile } from "node:fs/promises";
 
 async function render() {
   const workerUrl = new URL("../dist/server/index.js", import.meta.url);
@@ -33,4 +34,12 @@ test("server-renders the quality platform dashboard instead of the starter", asy
   assert.match(html, /전체 알람/);
   assert.match(html, /관리대상/);
   assert.doesNotMatch(html, /Your site is taking shape/);
+});
+
+test("includes interactive demo controls in the client page", async () => {
+  const source = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  assert.match(source, /CSV 내보내기/);
+  assert.match(source, /상태 필터/);
+  assert.match(source, /새 규칙 추가/);
+  assert.match(source, /신규 케이스 등록/);
 });

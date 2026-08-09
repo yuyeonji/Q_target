@@ -43,3 +43,13 @@ test("includes interactive demo controls in the client page", async () => {
   assert.match(source, /새 규칙 추가/);
   assert.match(source, /신규 케이스 등록/);
 });
+
+test("includes complete demo control surfaces", async () => {
+  const source = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  assert.match(source, /알림 센터/);
+  assert.match(source, /표시 설정/);
+  assert.match(source, /첨부 파일 추가/);
+  assert.match(source, /다음 페이지/);
+  assert.match(source, /고객지원 센터/);
+  assert.match(source, /시스템 로그/);
+});

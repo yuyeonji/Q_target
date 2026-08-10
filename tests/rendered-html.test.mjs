@@ -150,3 +150,17 @@ test("analysis dialog manages focus, Escape, and background inertness", async ()
   assert.match(source, /className="sidebar" inert=\{analysisPanel \? true : undefined\}/);
   assert.match(source, /className="workspace" inert=\{analysisPanel \? true : undefined\}/);
 });
+
+test("keeps alarm drawer actions clear of scrollable details and labels the action-plan approval button", async () => {
+  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+
+  assert.match(page, /className="drawer-body"/);
+  assert.match(page, /className="drawer-footer"/);
+  assert.match(css, /\.drawer\s*\{[^}]*display:\s*flex[^}]*flex-direction:\s*column[^}]*overflow:\s*hidden[^}]*\}/s);
+  assert.match(css, /\.drawer-body\s*\{[^}]*flex:\s*1[^}]*min-height:\s*0[^}]*overflow-y:\s*auto[^}]*\}/s);
+  assert.match(css, /\.drawer-footer\s*\{[^}]*position:\s*relative[^}]*flex:\s*none[^}]*\}/s);
+  assert.match(page, />저장 및 승인 요청<\/button>/);
+  assert.match(css, /\.modal footer\s*\{[^}]*position:\s*sticky[^}]*bottom:\s*0[^}]*\}/s);
+  assert.match(css, /\.modal footer \.black\s*\{[^}]*min-width:\s*180px[^}]*\}/s);
+});

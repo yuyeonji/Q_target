@@ -60,8 +60,17 @@ test("includes complete demo control surfaces", async () => {
 
 test("wires dashboard analysis controls and critical-alarm navigation", async () => {
   const source = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const criticalNavigation = source.match(/onViewCriticalAlarms=\{\(\) => \{[^}]+\}\}/)?.[0] ?? "";
 
   assert.match(source, /setAnalysisPanel\("trend"\)/);
   assert.match(source, /setAnalysisPanel\("distribution"\)/);
-  assert.match(source, /setView\("alarms"\);\s*setAlarmFilter\("심각"\)/);
+  assert.match(source, /onOpenAnalysis\("trend"\)/);
+  assert.match(source, /onOpenAnalysis\("distribution"\)/);
+  assert.match(source, /onClick=\{onViewCriticalAlarms\}/);
+  assert.match(criticalNavigation, /setView\("alarms"\);\s*setAlarmFilter\("심각"\)/);
+  assert.doesNotMatch(criticalNavigation, /setAlarm\(/);
+  assert.match(source, /\{analysisPanel && <AnalysisPanel/);
+  assert.match(source, /function AnalysisPanel/);
+  assert.match(source, /기간별 카테고리 추이/);
+  assert.match(source, /상태별 대상 분포/);
 });

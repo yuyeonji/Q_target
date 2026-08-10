@@ -164,3 +164,24 @@ test("keeps alarm drawer actions clear of scrollable details and labels the acti
   assert.match(css, /\.modal footer\s*\{[^}]*position:\s*sticky[^}]*bottom:\s*0[^}]*\}/s);
   assert.match(css, /\.modal footer \.black\s*\{[^}]*min-width:\s*180px[^}]*\}/s);
 });
+
+test("splits master tabs into distinct editable rule and code management surfaces", async () => {
+  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+
+  assert.match(page, /const initialAlarmRules: Rule\[\]/);
+  assert.match(page, /const initialConversionRules: Rule\[\]/);
+  assert.match(page, /const initialCodes: MasterCode\[\]/);
+  assert.match(page, /function RuleManagement/);
+  assert.match(page, /function CodeManagement/);
+  assert.match(page, /알람 규칙 관리/);
+  assert.match(page, /전환 규칙 관리/);
+  assert.match(page, /코드값/);
+  assert.match(page, /aria-label="규칙명 수정"/);
+  assert.match(page, /aria-label="적용 범위 수정"/);
+  assert.match(page, /aria-label="임계값 수정"/);
+  assert.match(page, />활성<\/button>[\s\S]*?>비활성<\/button>/);
+  assert.doesNotMatch(page, /window\.prompt/);
+  assert.match(css, /\.rule-state-choice\.active[^}]*background:\s*#[0-9a-f]{6}[^}]*color:\s*#fff/i);
+  assert.match(css, /\.rule-state-choice\.inactive[^}]*background:\s*#[0-9a-f]{6}[^}]*color:\s*#fff/i);
+});

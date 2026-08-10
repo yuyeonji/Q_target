@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 
 type ViewId = "dashboard" | "alarms" | "targets" | "master";
+type AnalysisPanel = "trend" | "distribution" | null;
 type AlarmStatus = "신규" | "검토중" | "종결";
 type Alarm = { id: string; time: string; item: string; type: string; process: string; line: string; status: AlarmStatus; reviewer: string };
 type Task = { id: number; title: string; owner: string; due: string; status: string };
@@ -46,6 +47,7 @@ function MiniBars({ critical = false }: { critical?: boolean }) {
 
 export default function Home() {
   const [view, setView] = useState<ViewId>("dashboard");
+  const [analysisPanel, setAnalysisPanel] = useState<AnalysisPanel>(null);
   const [search, setSearch] = useState("");
   const [alarmFilter, setAlarmFilter] = useState("전체");
   const [targetFilter, setTargetFilter] = useState("전체");
@@ -116,7 +118,7 @@ export default function Home() {
         </header>
 
         <div className="content">
-          {view === "dashboard" && <Dashboard period={period} factory={factory} product={product} setPeriod={setPeriod} setFactory={setFactory} setProduct={setProduct} onOpenAlarm={() => { setView("alarms"); setAlarm(alarmItems[0]); }} onNavigate={(nextView, filter) => { setView(nextView); if (nextView === "alarms") setAlarmFilter(filter); if (nextView === "targets") setTargetFilter(filter); }} />}
+          {view === "dashboard" && <Dashboard period={period} factory={factory} product={product} setPeriod={setPeriod} setFactory={setFactory} setProduct={setProduct} onOpenAnalysis={(panel) => panel === "trend" ? setAnalysisPanel("trend") : setAnalysisPanel("distribution")} onViewCriticalAlarms={() => { setView("alarms"); setAlarmFilter("심각"); }} onNavigate={(nextView, filter) => { setView(nextView); if (nextView === "alarms") setAlarmFilter(filter); if (nextView === "targets") setTargetFilter(filter); }} />}
           {view === "alarms" && <AlarmList alarms={visibleAlarms} search={search} filter={alarmFilter} setFilter={setAlarmFilter} onOpen={setAlarm} onExport={() => downloadCsv(visibleAlarms.map(({ id, time, item, type, process, line, status, reviewer }) => ({ id, time, item, type, process, line, status, reviewer })), "q-target-alarms.csv")} />}
           {view === "targets" && <TargetList targets={visibleTargets} filter={targetFilter} setFilter={setTargetFilter} onOpen={(target) => { setSelectedTarget(target); setActionPlan(true); }} onExport={() => downloadCsv(visibleTargets, "q-target-targets.csv")} />}
           {view === "master" && <Master tab={masterTab} setTab={setMasterTab} rules={rules} setRules={setRules} showNotice={showNotice} />}
@@ -127,6 +129,7 @@ export default function Home() {
       {notificationOpen && <QuickPanel title="알림 센터" onClose={() => setNotificationOpen(false)}><p><b>심각 알람 1건</b><br />Bearing Housing A1 검토 기한이 임박했습니다.</p><p><b>승인 요청 2건</b><br />조치계획 검토를 기다리고 있습니다.</p></QuickPanel>}
       {settingsOpen && <SettingsPanel compact={compact} setCompact={setCompact} onClose={() => setSettingsOpen(false)} />}
       {supportOpen && <QuickPanel title={supportOpen} onClose={() => setSupportOpen(null)}><p>{supportOpen === "고객지원 센터" ? "품질 운영팀 · 평일 09:00–18:00 · help@q-target.demo" : "최근 24시간 동안 오류 없이 정상 수집되었습니다."}</p></QuickPanel>}
+      {analysisPanel && <AnalysisPanel panel={analysisPanel} onClose={() => setAnalysisPanel(null)} />}
       {alarm && <AlarmDrawer alarm={alarm} tab={taskTab} setTab={setTaskTab} onClose={() => setAlarm(null)} onCloseAlarm={() => updateAlarm("종결", "알람을 조치 불필요로 종결했습니다.")} onMonitor={() => updateAlarm("검토중", "알람을 모니터링 상태로 전환했습니다.")} onAction={() => { setAlarmItems((items) => items.map((item) => item.id === alarm.id ? { ...item, status: "검토중", reviewer: "품질 검토팀" } : item)); setAlarm(null); setActionPlan(true); }} />}
       {actionPlan && <ActionPlan targetName={selectedTarget?.name ?? "설비 비정상 진동 발생"} tasks={tasks} newTask={newTask} setNewTask={setNewTask} taskOwner={taskOwner} setTaskOwner={setTaskOwner} taskDue={taskDue} setTaskDue={setTaskDue} onAdd={addTask} onDelete={(id) => setTasks(tasks.filter((task) => task.id !== id))} onClose={() => setActionPlan(false)} onSave={() => { setTargetItems((items) => items.map((target) => target.id === selectedTarget?.id ? { ...target, status: "진행 중" } : target)); setActionPlan(false); showNotice("조치계획을 저장하고 관리대상을 진행 상태로 변경했습니다."); }} />}
       {notice && <div className="toast" role="status">✓ {notice}</div>}
@@ -134,15 +137,42 @@ export default function Home() {
   );
 }
 
-function Dashboard({ period, factory, product, setPeriod, setFactory, setProduct, onOpenAlarm, onNavigate }: { period: string; factory: string; product: string; setPeriod: (value: string) => void; setFactory: (value: string) => void; setProduct: (value: string) => void; onOpenAlarm: () => void; onNavigate: (view: ViewId, filter: string) => void }) {
+function Dashboard({ period, factory, product, setPeriod, setFactory, setProduct, onOpenAnalysis, onViewCriticalAlarms, onNavigate }: { period: string; factory: string; product: string; setPeriod: (value: string) => void; setFactory: (value: string) => void; setProduct: (value: string) => void; onOpenAnalysis: (panel: Exclude<AnalysisPanel, null>) => void; onViewCriticalAlarms: () => void; onNavigate: (view: ViewId, filter: string) => void }) {
   return <>
     <div className="page-head"><div><h2>현황판 개요</h2><p>{period} · {factory} · {product}</p></div><div className="filters"><label>기간<select value={period} onChange={(e) => setPeriod(e.target.value)}><option>최근 7일</option><option>최근 30일</option><option>이번 분기</option></select></label><label>공장<select value={factory} onChange={(e) => setFactory(e.target.value)}><option>전체 공장</option><option>알파 공장</option><option>베타 공장</option></select></label><label>제품<select value={product} onChange={(e) => setProduct(e.target.value)}><option>전체 제품</option><option>Type X</option><option>Type Y</option></select></label></div></div>
     <div className="kpis"><button className="kpi-button" onClick={() => onNavigate("alarms", "전체")}><Kpi title="전체 알람" value={period === "최근 7일" ? "2,405" : "8,742"} note="● 142 심각    ● 893 신규" trend="↗ +12%" /></button><button className="kpi-button" onClick={() => onNavigate("targets", "진행 중")}><Kpi title="관리대상" value={factory === "전체 공장" ? "84" : "28"} note="● 62 진행중    ● 12 기한 초과" trend="→ 0%" /></button><article className="kpi-button"><Kpi title="조치 종결률" value="92.4%" note="목표: 95%" trend="↗ +4.2%" progress /></article></div>
-    <div className="dashboard-grid"><article className="card chart-card"><h3>카테고리별 알람 추세 <b>⋮</b></h3><div className="chart"><span style={{height:"40%"}} /><span style={{height:"65%"}} /><span className="pink" style={{height:"84%"}} /><span style={{height:"45%"}} /><span style={{height:"30%"}} /><span style={{height:"55%"}} /><span style={{height:"70%"}} /><span style={{height:"90%"}} /><span style={{height:"60%"}} /><span style={{height:"40%"}} /></div><p className="legend">● 샘플 지연　● 공정능력　● 트렌드 이탈</p></article>
-      <article className="card donut-card"><h3>대상 분포 <b>⋮</b></h3><div className="donut"><strong>84<small>전체</small></strong></div><div className="distribution"><p>● 정상 <b>50 (60%)</b></p><p>● 위험 <b>22 (25%)</b></p><p className="red-text">● 기한 초과 <b>12 (15%)</b></p></div></article>
-      <article className="card table-card"><h3>심각 알람 검토 대기 <button onClick={onOpenAlarm}>전체 보기 →</button></h3><table><thead><tr><th>알람 ID</th><th>유형</th><th>공장 / 라인</th><th>지속 시간</th><th>상태</th></tr></thead><tbody>{[["ALM-8492","샘플 지연","알파 - L1","4h 12m"],["ALM-8490","공정능력 위반","베타 - L3","2h 45m"],["ALM-8488","트렌드 경고","감마 - L2","1h 10m"],["ALM-8475","샘플 지연","알파 - L1","5h 30m"]].map((r) => <tr key={r[0]}><td>{r[0]}</td><td>{r[1]}</td><td>{r[2]}</td><td>{r[3]}</td><td><Status>심각</Status></td></tr>)}</tbody></table></article>
+    <div className="dashboard-grid"><article className="card chart-card"><h3>카테고리별 알람 추세 <button type="button" aria-label="카테고리별 알람 추세 상세 보기" onClick={() => onOpenAnalysis("trend")}>⋮</button></h3><div className="chart"><span style={{height:"40%"}} /><span style={{height:"65%"}} /><span className="pink" style={{height:"84%"}} /><span style={{height:"45%"}} /><span style={{height:"30%"}} /><span style={{height:"55%"}} /><span style={{height:"70%"}} /><span style={{height:"90%"}} /><span style={{height:"60%"}} /><span style={{height:"40%"}} /></div><p className="legend">● 샘플 지연　● 공정능력　● 트렌드 이탈</p></article>
+      <article className="card donut-card"><h3>대상 분포 <button type="button" aria-label="대상 분포 상세 보기" onClick={() => onOpenAnalysis("distribution")}>⋮</button></h3><div className="donut"><strong>84<small>전체</small></strong></div><div className="distribution"><p>● 정상 <b>50 (60%)</b></p><p>● 위험 <b>22 (25%)</b></p><p className="red-text">● 기한 초과 <b>12 (15%)</b></p></div></article>
+      <article className="card table-card"><h3>심각 알람 검토 대기 <button onClick={onViewCriticalAlarms}>전체 보기 →</button></h3><table><thead><tr><th>알람 ID</th><th>유형</th><th>공장 / 라인</th><th>지속 시간</th><th>상태</th></tr></thead><tbody>{[["ALM-8492","샘플 지연","알파 - L1","4h 12m"],["ALM-8490","공정능력 위반","베타 - L3","2h 45m"],["ALM-8488","트렌드 경고","감마 - L2","1h 10m"],["ALM-8475","샘플 지연","알파 - L1","5h 30m"]].map((r) => <tr key={r[0]}><td>{r[0]}</td><td>{r[1]}</td><td>{r[2]}</td><td>{r[3]}</td><td><Status>심각</Status></td></tr>)}</tbody></table></article>
       <article className="card overdue"><h3>⚠ 기한 초과 관리대상</h3>{["L1 불량률 감소","자동 샘플링 도입","3분기 공정 심사 준수"].map((x, i) => <div className="overdue-row" key={x}><small>TGT-8{84 + i}</small><b>{x}</b><div><i style={{width: `${65 + i * 10}%`}} /></div></div>)}</article></div>
   </>;
+}
+
+function AnalysisPanel({ panel, onClose }: { panel: Exclude<AnalysisPanel, null>; onClose: () => void }) {
+  const title = panel === "trend" ? "카테고리별 알람 추세 분석" : "대상 분포 분석";
+
+  return <div className="overlay" role="presentation" onClick={onClose}>
+    <aside className="drawer" role="dialog" aria-modal="true" aria-labelledby="analysis-panel-title" onClick={(event) => event.stopPropagation()}>
+      <button aria-label="분석 패널 닫기" className="close" onClick={onClose}>×</button>
+      <span className="badge">DASHBOARD ANALYSIS</span>
+      <h2 id="analysis-panel-title">{title}</h2>
+      {panel === "trend" ? <section>
+        <h3>기간별 카테고리 추이</h3>
+        <table><thead><tr><th>카테고리</th><th>최근 7일</th><th>최근 30일</th><th>이번 분기</th></tr></thead><tbody>
+          <tr><td>샘플 지연</td><td>18</td><td>72</td><td>211</td></tr>
+          <tr><td>공정능력</td><td>24</td><td>96</td><td>284</td></tr>
+          <tr><td>트렌드 이탈</td><td>12</td><td>51</td><td>143</td></tr>
+        </tbody></table>
+      </section> : <section>
+        <h3>상태별 대상 분포</h3>
+        <table><thead><tr><th>상태</th><th>건수</th><th>비중</th><th>대상 행</th></tr></thead><tbody>
+          <tr><td>정상</td><td>50</td><td>60%</td><td>TGT-8921, TGT-8925</td></tr>
+          <tr><td>위험</td><td>22</td><td>25%</td><td>TGT-8918, TGT-8922</td></tr>
+          <tr><td>기한 초과</td><td>12</td><td>15%</td><td>TGT-8884, TGT-8885</td></tr>
+        </tbody></table>
+      </section>}
+    </aside>
+  </div>;
 }
 
 function Kpi({ title, value, note, trend, progress }: { title: string; value: string; note: string; trend: string; progress?: boolean }) { return <article className="card kpi"><div><h3>{title}</h3><b className="trend">{trend}</b></div><strong>{value}</strong>{progress && <div className="progress"><i /></div>}<p>{note}</p></article>; }

@@ -57,3 +57,11 @@ test("includes complete demo control surfaces", async () => {
   assert.match(source, /compact-mode/);
   assert.match(source, /selectedTarget/);
 });
+
+test("wires dashboard analysis controls and critical-alarm navigation", async () => {
+  const source = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+
+  assert.match(source, /setAnalysisPanel\("trend"\)/);
+  assert.match(source, /setAnalysisPanel\("distribution"\)/);
+  assert.match(source, /setView\("alarms"\);\s*setAlarmFilter\("심각"\)/);
+});

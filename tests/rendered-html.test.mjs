@@ -103,6 +103,16 @@ test("keeps the compact desktop donut and overdue rows inside their equal-height
   assert.match(desktop, /\.overdue-row\{margin:4px 8px;padding:5px;gap:2px\}/);
 });
 
+test("uses a right-side target distribution legend", async () => {
+  const source = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+
+  assert.match(source, /distribution-layout/);
+  assert.match(source, /distribution-legend/);
+  assert.match(css, /\.distribution-layout[^}]*display:\s*grid/s);
+  assert.match(css, /@media\(max-width:1200px\)[\s\S]*\.distribution-layout[^}]*grid-template-columns:\s*1fr/s);
+});
+
 test("makes narrow tables and charts horizontally reachable", async () => {
   const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");

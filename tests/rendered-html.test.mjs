@@ -75,12 +75,45 @@ test("wires dashboard analysis controls and critical-alarm navigation", async ()
   assert.match(source, /상태별 대상 분포/);
 });
 
-test("constrains only wide desktop dashboards and restores visible stacked content in the workspace-safe breakpoint", async () => {
+test("critical-alarm navigation resolves to a supported filter with visible history", async () => {
+  const source = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+
+  assert.match(source, /type AlarmStatus = [^;]*"심각"/);
+  assert.match(source, /const alarms: Alarm\[\] = \[[\s\S]*?status: "심각"/);
+  assert.match(source, /상태 필터 <select[^>]*>[\s\S]*?<option>심각<\/option>/);
+});
+
+test("fits the wide desktop dashboard without hiding card content", async () => {
   const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
 
   assert.match(page, /<div className="dashboard-view">/);
-  assert.match(css, /\.dashboard-view\s*\{[^}]*height:\s*calc\(100vh - 50px\)[^}]*overflow:\s*hidden[^}]*\}/s);
-  assert.doesNotMatch(css, /\.dashboard-grid\s*\{[^}]*grid-template-rows:\s*minmax\(0,1fr\)/);
+  assert.match(css, /\.dashboard-view\s*\{[^}]*height:\s*calc\(100vh - 50px\)[^}]*overflow:\s*visible[^}]*\}/s);
+  assert.match(css, /@media\s*\(min-width:\s*1201px\)[\s\S]*?\.dashboard-grid\s*\{[^}]*grid-template-rows:\s*repeat\(2,minmax\(0,1fr\)\)[^}]*flex:\s*1[^}]*\}/);
+  assert.match(css, /@media\s*\(min-width:\s*1201px\)[\s\S]*?\.dashboard-view \.table-card\s+th,\.dashboard-view \.table-card\s+td\s*\{[^}]*padding:\s*6px 10px[^}]*\}/);
   assert.match(css, /@media\s*\(max-width:\s*1200px\)\s*\{[\s\S]*?\.dashboard-view\s*\{[^}]*height:\s*auto[^}]*overflow:\s*visible[^}]*\}/);
+});
+
+test("makes narrow tables and charts horizontally reachable", async () => {
+  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+
+  assert.match(page, /function ScrollTable/);
+  assert.match(page, /className="table-scroll" role="region" aria-label=\{label\} tabIndex=\{0\}/);
+  assert.match(page, /className="chart-scroll" role="region" aria-label="카테고리별 알람 추세 차트" tabIndex=\{0\}/);
+  assert.match(css, /\.table-scroll,\.chart-scroll\s*\{[^}]*overflow-x:\s*auto[^}]*\}/);
+  assert.match(css, /@media\s*\(max-width:\s*600px\)[\s\S]*?\.chart\s*\{[^}]*min-width:\s*520px[^}]*\}/);
+});
+
+test("analysis dialog manages focus, Escape, and background inertness", async () => {
+  const source = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+
+  assert.match(source, /const dialogRef = useRef<HTMLElement>/);
+  assert.match(source, /previousFocus\.current = document\.activeElement/);
+  assert.match(source, /event\.key === "Escape"/);
+  assert.match(source, /event\.key !== "Tab"/);
+  assert.match(source, /previousFocus\.current\?\.focus\(\)/);
+  assert.match(source, /ref=\{dialogRef\}[^>]*tabIndex=\{-1\}/);
+  assert.match(source, /className="sidebar" inert=\{analysisPanel \? true : undefined\}/);
+  assert.match(source, /className="workspace" inert=\{analysisPanel \? true : undefined\}/);
 });

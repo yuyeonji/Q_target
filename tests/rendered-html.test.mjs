@@ -163,6 +163,7 @@ test("keeps alarm drawer actions clear of scrollable details and labels the acti
   assert.match(page, />저장 및 승인 요청<\/button>/);
   assert.match(css, /\.modal footer\s*\{[^}]*position:\s*sticky[^}]*bottom:\s*0[^}]*\}/s);
   assert.match(css, /\.modal footer \.black\s*\{[^}]*min-width:\s*180px[^}]*\}/s);
+  assert.match(css, /\.drawer-footer \.black,\.modal footer \.black\s*\{[^}]*background:\s*#050505[^}]*color:\s*#fff[^}]*\}/s);
 });
 
 test("splits master tabs into distinct editable rule and code management surfaces", async () => {

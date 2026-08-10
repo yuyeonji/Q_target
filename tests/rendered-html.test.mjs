@@ -113,6 +113,18 @@ test("uses a right-side target distribution legend", async () => {
   assert.match(css, /@media\(max-width:1200px\)[\s\S]*\.distribution-layout[^}]*grid-template-columns:\s*1fr/s);
 });
 
+test("matches target distribution legend markers to donut segment colors", async () => {
+  const source = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+
+  assert.match(source, /distribution-dot normal/);
+  assert.match(source, /distribution-dot risk/);
+  assert.match(source, /distribution-dot overdue/);
+  assert.match(css, /\.distribution-dot\.normal\{color:#111827\}/);
+  assert.match(css, /\.distribution-dot\.risk\{color:#4b4de2\}/);
+  assert.match(css, /\.distribution-dot\.overdue\{color:#d0181d\}/);
+});
+
 test("makes narrow tables and charts horizontally reachable", async () => {
   const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");

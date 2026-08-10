@@ -150,3 +150,39 @@ test("analysis dialog manages focus, Escape, and background inertness", async ()
   assert.match(source, /className="sidebar" inert=\{analysisPanel \? true : undefined\}/);
   assert.match(source, /className="workspace" inert=\{analysisPanel \? true : undefined\}/);
 });
+
+test("keeps alarm drawer actions clear of scrollable details and labels the action-plan approval button", async () => {
+  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+
+  assert.match(page, /className="drawer-body"/);
+  assert.match(page, /className="drawer-footer"/);
+  assert.match(css, /\.drawer\s*\{[^}]*display:\s*flex[^}]*flex-direction:\s*column[^}]*overflow:\s*hidden[^}]*\}/s);
+  assert.match(css, /\.drawer-body\s*\{[^}]*flex:\s*1[^}]*min-height:\s*0[^}]*overflow-y:\s*auto[^}]*\}/s);
+  assert.match(css, /\.drawer-footer\s*\{[^}]*position:\s*relative[^}]*flex:\s*none[^}]*\}/s);
+  assert.match(page, />저장 및 승인 요청<\/button>/);
+  assert.match(css, /\.modal footer\s*\{[^}]*position:\s*sticky[^}]*bottom:\s*0[^}]*\}/s);
+  assert.match(css, /\.modal footer \.black\s*\{[^}]*min-width:\s*180px[^}]*\}/s);
+  assert.match(css, /\.drawer-footer \.black,\.modal footer \.black\s*\{[^}]*background:\s*#050505[^}]*color:\s*#fff[^}]*\}/s);
+});
+
+test("splits master tabs into distinct editable rule and code management surfaces", async () => {
+  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+
+  assert.match(page, /const initialAlarmRules: Rule\[\]/);
+  assert.match(page, /const initialConversionRules: Rule\[\]/);
+  assert.match(page, /const initialCodes: MasterCode\[\]/);
+  assert.match(page, /function RuleManagement/);
+  assert.match(page, /function CodeManagement/);
+  assert.match(page, /알람 규칙 관리/);
+  assert.match(page, /전환 규칙 관리/);
+  assert.match(page, /코드값/);
+  assert.match(page, /aria-label="규칙명 수정"/);
+  assert.match(page, /aria-label="적용 범위 수정"/);
+  assert.match(page, /aria-label="임계값 수정"/);
+  assert.match(page, />활성<\/button>[\s\S]*?>비활성<\/button>/);
+  assert.doesNotMatch(page, /window\.prompt/);
+  assert.match(css, /\.rule-state-choice\.active[^}]*background:\s*#[0-9a-f]{6}[^}]*color:\s*#fff/i);
+  assert.match(css, /\.rule-state-choice\.inactive[^}]*background:\s*#[0-9a-f]{6}[^}]*color:\s*#fff/i);
+});

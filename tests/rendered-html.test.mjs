@@ -107,6 +107,7 @@ test("uses a right-side target distribution legend", async () => {
   const source = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
 
+  assert.match(css, /\.distribution-layout \.donut[^}]*clamp\(140px, 13vw, 180px\)/s);
   assert.match(source, /distribution-layout/);
   assert.match(source, /distribution-legend/);
   assert.match(css, /\.distribution-layout[^}]*display:\s*grid/s);

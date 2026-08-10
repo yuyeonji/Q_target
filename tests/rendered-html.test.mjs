@@ -98,6 +98,7 @@ test("keeps the compact desktop donut and overdue rows inside their equal-height
   const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
   const desktop = css.match(/@media\(min-width:1201px\)\{([\s\S]*?)\}\s*@media\(max-width:1200px\)/)?.[1] ?? "";
 
+  assert.match(desktop, /\.distribution-layout \.donut\{width:114px;height:114px;margin:0 auto\}/);
   assert.match(desktop, /\.distribution\{padding:0 10px 0\}/);
   assert.match(desktop, /\.distribution p\{padding:3px 7px;margin:2px 0\}/);
   assert.match(desktop, /\.overdue-row\{margin:4px 8px;padding:5px;gap:2px\}/);

@@ -74,3 +74,12 @@ test("wires dashboard analysis controls and critical-alarm navigation", async ()
   assert.match(source, /기간별 카테고리 추이/);
   assert.match(source, /상태별 대상 분포/);
 });
+
+test("constrains the desktop dashboard to the viewport while preserving mobile scrolling", async () => {
+  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+
+  assert.match(page, /<div className="dashboard-view">/);
+  assert.match(css, /\.dashboard-view\s*\{[^}]*height:\s*calc\(100vh - 50px\)[^}]*overflow:\s*hidden[^}]*\}/s);
+  assert.match(css, /@media\s*\(max-width:\s*980px\)\s*\{[\s\S]*?\.dashboard-view\s*\{[^}]*height:\s*auto[^}]*\}/);
+});

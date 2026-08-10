@@ -94,6 +94,15 @@ test("fits the wide desktop dashboard without hiding card content", async () => 
   assert.match(css, /@media\s*\(max-width:\s*1200px\)\s*\{[\s\S]*?\.dashboard-view\s*\{[^}]*height:\s*auto[^}]*overflow:\s*visible[^}]*\}/);
 });
 
+test("keeps the compact desktop donut and overdue rows inside their equal-height cards", async () => {
+  const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  const desktop = css.match(/@media\(min-width:1201px\)\{([\s\S]*?)\}\s*@media\(max-width:1200px\)/)?.[1] ?? "";
+
+  assert.match(desktop, /\.distribution\{padding:0 10px 0\}/);
+  assert.match(desktop, /\.distribution p\{padding:3px 7px;margin:2px 0\}/);
+  assert.match(desktop, /\.overdue-row\{margin:4px 8px;padding:5px;gap:2px\}/);
+});
+
 test("makes narrow tables and charts horizontally reachable", async () => {
   const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");

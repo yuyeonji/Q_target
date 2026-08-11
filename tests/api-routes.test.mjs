@@ -15,7 +15,7 @@ function createFakeRepository({ failAtomicMutation = false } = {}) {
     { stageName: "시험 분석 완료", eventAt: "2023-10-12T10:40:00.000Z" },
     { stageName: "판정 지연", eventAt: "2023-10-12T12:20:00.000Z" },
   ];
-  const alarms = [{ id: "alarm-1", item: "AL-99198", type: "Sample Delay" }];
+  const alarms = [{ id: "alarm-1", alarmCode: "AL-99198", item: "Bearing Housing A1", type: "Sample Delay" }];
 
   return {
     auditEvents,
@@ -54,7 +54,7 @@ test("alarm handlers return a list and Sample Delay stages in chronological orde
   const repository = createFakeRepository();
 
   const list = await createAlarmRouteHandlers(repository).GET();
-  assert.deepEqual((await list.json()).alarms, [{ id: "alarm-1", item: "AL-99198", type: "Sample Delay" }]);
+  assert.deepEqual((await list.json()).alarms, [{ id: "alarm-1", alarmCode: "AL-99198", item: "Bearing Housing A1", type: "Sample Delay" }]);
 
   const detail = await createAlarmDetailRouteHandlers(repository).GET(
     new Request("http://app.local/api/alarms/alarm-1"),
@@ -89,6 +89,7 @@ test("target and action-plan mutations save their audit events through atomic re
     body: JSON.stringify({ name: "새 관리대상", status: "대기중", owner: "홍길동", priority: "높음" }),
   }));
   assert.equal(created.status, 201);
+  assert.match(repository.savedTargets[0].targetCode, /^TRG-[0-9A-F]{8}$/);
 
   const updated = await createTargetDetailRouteHandlers(repository).PATCH(new Request("http://app.local/api/targets/target-1", {
     method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ status: "진행중" }),
@@ -123,7 +124,7 @@ test("a failed atomic mutation leaves no partial target, action-plan, or audit d
 
 test("development seed includes current-demo action plans and action tasks", async () => {
   const { developmentSeed } = await import("../lib/seed.ts");
-  assert.equal(developmentSeed.alarms[0].item, "AL-99198");
+  assert.equal(developmentSeed.alarms[0].alarmCode, "AL-99198");
   assert.equal(developmentSeed.actionPlans.length, 1);
   assert.equal(developmentSeed.actionTasks.length, 2);
   assert.ok(developmentSeed.actionTasks.every((task) => task.actionPlanId === developmentSeed.actionPlans[0].id));

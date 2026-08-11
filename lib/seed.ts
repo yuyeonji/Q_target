@@ -1,3 +1,5 @@
+import { sql } from "drizzle-orm";
+
 const sampleDelayAlarmId = "99198000-0000-4000-8000-000000000001";
 const sampleDelayTargetId = "99198000-0000-4000-8000-000000000002";
 const sampleDelayActionPlanId = "99198000-0000-4000-8000-000000000003";
@@ -26,7 +28,7 @@ export const developmentSeed = {
       process: "Machining",
       line: "Line 4",
       status: "심각",
-      reviewer: "검토 대기",
+      reviewer: "품질 검토팀",
       reviewDeadline: new Date("2023-10-13T10:42:15Z"),
     },
     {
@@ -37,8 +39,8 @@ export const developmentSeed = {
       type: "CPK Drop",
       process: "Machining",
       line: "Line 4",
-      status: "긴급",
-      reviewer: null,
+      status: "신규",
+      reviewer: "-",
       reviewDeadline: null,
     },
     {
@@ -70,7 +72,7 @@ export const developmentSeed = {
     {
       id: sampleDelayTargetId,
       targetCode: "TRG-8921",
-      name: "베어링 하우징 개선",
+      name: "터빈 압파 교정",
       status: "진행 중",
       owner: "Sarah Chen",
       priority: "높음",
@@ -90,7 +92,7 @@ export const developmentSeed = {
     {
       id: "89150000-0000-4000-8000-000000000001",
       targetCode: "TRG-8915",
-      name: "전자코어 센서 교체",
+      name: "원자로 코어 센서 동기화",
       status: "심각",
       owner: "John Doe",
       priority: "긴급",
@@ -100,7 +102,7 @@ export const developmentSeed = {
     {
       id: "89250000-0000-4000-8000-000000000001",
       targetCode: "TRG-8925",
-      name: "파일럿 정렬 테스트",
+      name: "파이프라인 압력 테스트",
       status: "대기",
       owner: "Aisha Patel",
       priority: "낮음",
@@ -110,7 +112,7 @@ export const developmentSeed = {
     {
       id: "89100000-0000-4000-8000-000000000001",
       targetCode: "TRG-8910",
-      name: "운전 장비 재고 확인",
+      name: "안전 장비 재고 확인",
       status: "완료",
       owner: "Marcus Rossi",
       priority: "중간",
@@ -154,8 +156,8 @@ export const developmentSeed = {
 };
 
 type SeedTables = {
-  alarms: unknown;
-  targets: unknown;
+  alarms: { id: unknown };
+  targets: { id: unknown };
   actionPlans: unknown;
   actionTasks: unknown;
   sampleDelayStages: { alarmId: unknown; stageName: unknown };
@@ -164,8 +166,32 @@ type SeedTables = {
 export async function seedDevelopmentData(database: { insert: Function; batch: Function }, tables: SeedTables) {
   assertValidSampleDelayStages(developmentSeed.sampleDelayStages);
   await database.batch([
-    database.insert(tables.alarms).values(developmentSeed.alarms).onConflictDoNothing(),
-    database.insert(tables.targets).values(developmentSeed.targets).onConflictDoNothing(),
+    database.insert(tables.alarms).values(developmentSeed.alarms).onConflictDoUpdate({
+      target: tables.alarms.id,
+      set: {
+        alarmCode: sql`excluded.alarm_code`,
+        occurredAt: sql`excluded.occurred_at`,
+        item: sql`excluded.item`,
+        type: sql`excluded.type`,
+        process: sql`excluded.process`,
+        line: sql`excluded.line`,
+        status: sql`excluded.status`,
+        reviewer: sql`excluded.reviewer`,
+        reviewDeadline: sql`excluded.review_deadline`,
+      },
+    }),
+    database.insert(tables.targets).values(developmentSeed.targets).onConflictDoUpdate({
+      target: tables.targets.id,
+      set: {
+        targetCode: sql`excluded.target_code`,
+        name: sql`excluded.name`,
+        status: sql`excluded.status`,
+        owner: sql`excluded.owner`,
+        priority: sql`excluded.priority`,
+        dueDate: sql`excluded.due_date`,
+        sourceAlarmId: sql`excluded.source_alarm_id`,
+      },
+    }),
     database.insert(tables.actionPlans).values(developmentSeed.actionPlans).onConflictDoNothing(),
     database.insert(tables.actionTasks).values(developmentSeed.actionTasks).onConflictDoNothing(),
     database.insert(tables.sampleDelayStages).values(developmentSeed.sampleDelayStages).onConflictDoNothing({

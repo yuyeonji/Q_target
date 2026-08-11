@@ -188,9 +188,9 @@ test("uses an accessible related-information accordion and sample-delay workflow
   const alarmDrawer =
     page.match(/function AlarmDrawer\([\s\S]*?\n}\n\nconst relatedInfo =/)?.[0] ?? "";
   const relatedAccordion =
-    page.match(/function RelatedInfoAccordion\(\)[\s\S]*?\n}\n\nfunction SampleDelayDrawer/)?.[0] ?? "";
+    page.match(/function RelatedInfoAccordion\(\)[\s\S]*?\r?\n}\r?\n\r?\nfunction SampleDelayDrawer/)?.[0] ?? "";
   const sampleDelayDrawer =
-    page.match(/function SampleDelayDrawer\([\s\S]*?\n}\n\nfunction NewCase/)?.[0] ?? "";
+    page.match(/function SampleDelayDrawer\([\s\S]*?\r?\n}\r?\n\r?\nfunction NewCase/)?.[0] ?? "";
 
   assert.match(page, /function RelatedInfoAccordion/);
   assert.match(page, /aria-expanded=\{expanded\}/);
@@ -241,8 +241,8 @@ test("uses Korean-first action-plan labels and clearly distinguished rule states
   const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
 
   assert.match(page, /<h3>🟣 원인 분석<\/h3>/);
-  assert.match(page, /\n\s*현상\n\s*<textarea/);
-  assert.match(page, /\n\s*근본 원인\n\s*<textarea/);
+  assert.match(page, /현상\s*<textarea/);
+  assert.match(page, /근본 원인\s*<textarea/);
   assert.match(page, /<h3>▣ 조치 계획<\/h3>/);
   assert.match(page, /aria-pressed=\{active\}/);
   assert.match(page, /aria-pressed=\{!active\}/);

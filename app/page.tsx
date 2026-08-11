@@ -1932,28 +1932,17 @@ function TargetList({
 
 function AlarmDrawer({
   alarm,
-  tab,
-  setTab,
   onClose,
   onCloseAlarm,
   onMonitor,
   onAction,
 }: {
   alarm: Alarm;
-  tab?: string;
-  setTab?: (s: string) => void;
   onClose: () => void;
   onCloseAlarm: () => void;
   onMonitor: () => void;
   onAction: () => void;
 }) {
-  const [attachments, setAttachments] = useState(["측정 데이터.csv · 42KB"]);
-  const tabs = [
-    "최근 유사 알람",
-    "과거 관리대상 내역",
-    "과거 조치 및 효과",
-    "첨부파일",
-  ];
   return (
     <div className="overlay">
       <aside className="drawer">
@@ -2057,39 +2046,6 @@ function AlarmDrawer({
               </p>
             </div>
           </section>
-          <section className="drawer-tab-content">
-            <h3>{tab}</h3>
-            {tab === "최근 유사 알람" && (
-              <p>최근 30일 내 같은 설비에서 3건의 유사 알람이 발생했습니다.</p>
-            )}
-            {tab === "과거 관리대상 내역" && (
-              <p>TRG-8841 · 2023-09-18 · 조치 완료</p>
-            )}
-            {tab === "과거 조치 및 효과" && (
-              <p>베어링 교체 후 CPK가 1.42까지 회복되었습니다.</p>
-            )}
-            {tab === "첨부파일" && (
-              <div>
-                <p>
-                  {attachments.map((file) => (
-                    <span className="demo-attachment" key={file}>
-                      {file}
-                    </span>
-                  ))}
-                </p>
-                <button
-                  onClick={() =>
-                    setAttachments([
-                      ...attachments,
-                      "demo-attachment-" + (attachments.length + 1) + ".pdf",
-                    ])
-                  }
-                >
-                  첨부 파일 추가
-                </button>
-              </div>
-            )}
-          </section>
           <RelatedInfoAccordion />
         </div>
         <div className="drawer-footer">
@@ -2135,11 +2091,9 @@ function RelatedInfoAccordion() {
             >
               {label}
             </button>
-            {expanded && (
-              <div className="related-info-panel" id={panelId}>
-                {content}
-              </div>
-            )}
+            <div className="related-info-panel" id={panelId} hidden={!expanded}>
+              {content}
+            </div>
           </div>
         );
       })}

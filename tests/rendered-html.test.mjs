@@ -48,12 +48,10 @@ test("includes complete demo control surfaces", async () => {
   const source = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   assert.match(source, /알림 센터/);
   assert.match(source, /표시 설정/);
-  assert.match(source, /첨부 파일 추가/);
   assert.match(source, /다음 페이지/);
   assert.match(source, /고객지원 센터/);
   assert.match(source, /시스템 로그/);
   assert.match(source, /q-target-rules.csv/);
-  assert.match(source, /demo-attachment/);
   assert.match(source, /compact-mode/);
   assert.match(source, /selectedTarget/);
 });
@@ -169,11 +167,16 @@ test("keeps alarm drawer actions clear of scrollable details and labels the acti
 test("uses an accessible related-information accordion and sample-delay workflow drawer", async () => {
   const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  const alarmDrawer =
+    page.match(/function AlarmDrawer\([\s\S]*?\n}\n\nconst relatedInfo =/)?.[0] ?? "";
 
   assert.match(page, /function RelatedInfoAccordion/);
   assert.match(page, /aria-expanded=\{expanded\}/);
   assert.match(page, /aria-controls=\{panelId\}/);
-  assert.doesNotMatch(page, /drawer-tabs/);
+  assert.match(page, /id=\{panelId\} hidden=\{!expanded\}/);
+  assert.doesNotMatch(alarmDrawer, /\btab\??:|\bsetTab\??:|const tabs =|drawer-tab-content/);
+  assert.doesNotMatch(page, /drawer-tabs|drawer-tab-content|demo-attachment/);
+  assert.doesNotMatch(css, /\.drawer-tabs|\.drawer-tab-content|\.demo-attachment/);
   assert.match(page, /alarm\.type === "Sample Delay"\s*\?\s*\(?\s*<SampleDelayDrawer/);
   assert.match(page, /function SampleDelayDrawer/);
   assert.match(page, /샘플 의뢰[\s\S]*시험 접수[\s\S]*시험 분석 완료[\s\S]*판정 지연/);

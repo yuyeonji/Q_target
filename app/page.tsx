@@ -1392,11 +1392,16 @@ function CodeManagement({
         category: draft.category.trim(),
         active: true,
       });
-      await reloadPersistedData();
-      setDraft({ code: "", name: "", category: "" });
-      showNotice("새 코드를 추가했습니다.");
     } catch {
       showNotice("저장에 실패했습니다. 입력값은 유지됩니다. 다시 시도해 주세요.");
+      return;
+    }
+    setDraft({ code: "", name: "", category: "" });
+    try {
+      await reloadPersistedData();
+      showNotice("새 코드를 추가했습니다.");
+    } catch {
+      showNotice("코드 저장은 완료되었습니다. 최신 데이터를 불러오지 못했습니다. 다시 시도 버튼으로 새로고침하세요.");
     }
   };
   const saveEdit = async (event: React.FormEvent) => {
@@ -1672,11 +1677,16 @@ function RuleManagement({
         threshold: draft.threshold.trim(),
         active: true,
       });
-      await reloadPersistedData();
-      setDraft({ name: "", scope: "", threshold: "" });
-      showNotice(`${title}에 새 규칙을 추가했습니다.`);
     } catch {
       showNotice("저장에 실패했습니다. 입력값은 유지됩니다. 다시 시도해 주세요.");
+      return;
+    }
+    setDraft({ name: "", scope: "", threshold: "" });
+    try {
+      await reloadPersistedData();
+      showNotice(`${title}에 새 규칙을 추가했습니다.`);
+    } catch {
+      showNotice(`${title} 규칙 저장은 완료되었습니다. 최신 데이터를 불러오지 못했습니다. 다시 시도 버튼으로 새로고침하세요.`);
     }
   };
   const saveEdit = async (event: React.FormEvent) => {

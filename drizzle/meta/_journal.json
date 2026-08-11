@@ -29,6 +29,13 @@
       "when": 1786500000000,
       "tag": "0003_persist_demo_identifiers",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1786430772113,
+      "tag": "0004_full_persistence",
+      "breakpoints": true
     }
   ]
 }

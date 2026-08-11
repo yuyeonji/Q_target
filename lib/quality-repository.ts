@@ -12,6 +12,28 @@ export type NewTarget = {
 
 export type TargetChanges = Partial<Pick<NewTarget, "name" | "status" | "owner" | "priority" | "dueDate">>;
 
+export type NewMasterRule = {
+  ruleCode: string;
+  kind: string;
+  name: string;
+  scope: string;
+  threshold: string;
+  active?: boolean;
+};
+
+export type MasterRuleChanges = Partial<Pick<NewMasterRule, "name" | "scope" | "threshold" | "active">>;
+
+export type NewMasterCode = {
+  code: string;
+  name: string;
+  category: string;
+  active?: boolean;
+};
+
+export type MasterCodeChanges = Partial<NewMasterCode>;
+
+export type AlarmChanges = Partial<Pick<{ status: string; reviewer: string | null }, "status" | "reviewer">>;
+
 export type NewActionPlan = {
   alarmId?: string | null;
   targetId?: string | null;
@@ -27,13 +49,20 @@ export interface QualityRepository {
   findAlarm(id: string): Promise<unknown | null>;
   listSampleDelayStages(alarmId: string): Promise<unknown[]>;
   listTargets(): Promise<unknown[]>;
+  listMasterRules(kind: string): Promise<unknown[]>;
+  listMasterCodes(): Promise<unknown[]>;
   createTargetWithAudit(input: NewTarget, audit: NewAuditEvent): Promise<{ id: string }>;
   updateTargetWithAudit(id: string, changes: TargetChanges, audit: NewAuditEvent): Promise<{ id: string } | null>;
   createActionPlanWithAudit(input: NewActionPlan, audit: NewAuditEvent): Promise<{ id: string }>;
+  createMasterRuleWithAudit(input: NewMasterRule, audit: NewAuditEvent): Promise<{ id: string }>;
+  updateMasterRuleWithAudit(id: string, changes: MasterRuleChanges, audit: NewAuditEvent): Promise<{ id: string } | null>;
+  createMasterCodeWithAudit(input: NewMasterCode, audit: NewAuditEvent): Promise<{ id: string }>;
+  updateMasterCodeWithAudit(id: string, changes: MasterCodeChanges, audit: NewAuditEvent): Promise<{ id: string } | null>;
+  updateAlarmWithAudit(id: string, changes: AlarmChanges, audit: NewAuditEvent): Promise<{ id: string } | null>;
 }
 
 type NewAuditEvent = { eventType: string; entityType: string; details?: Record<string, unknown> };
-type QualityTables = { actionPlans: any; actionTasks: any; alarms: any; auditEvents: any; sampleDelayStages: any; targets: any };
+type QualityTables = { actionPlans: any; actionTasks: any; alarms: any; auditEvents: any; masterCodes: any; masterRules: any; sampleDelayStages: any; targets: any };
 
 export function createQualityRepository(database: unknown, tables: QualityTables): QualityRepository {
   // The Drizzle type includes all current tables, while this boundary deliberately
@@ -53,6 +82,12 @@ export function createQualityRepository(database: unknown, tables: QualityTables
     },
     async listTargets() {
       return db.select().from(tables.targets).orderBy(desc(tables.targets.createdAt));
+    },
+    async listMasterRules(kind) {
+      return db.select().from(tables.masterRules).where(eq(tables.masterRules.kind, kind));
+    },
+    async listMasterCodes() {
+      return db.select().from(tables.masterCodes).orderBy(asc(tables.masterCodes.code));
     },
     async createTargetWithAudit(input, audit) {
       const id = crypto.randomUUID();
@@ -81,6 +116,49 @@ export function createQualityRepository(database: unknown, tables: QualityTables
       ];
       await db.batch(statements);
       return { id };
+    },
+    async createMasterRuleWithAudit(input, audit) {
+      const id = crypto.randomUUID();
+      await db.batch([
+        db.insert(tables.masterRules).values({ ...input, id }),
+        db.insert(tables.auditEvents).values({ ...audit, id: crypto.randomUUID(), entityId: id }),
+      ]);
+      return { id };
+    },
+    async updateMasterRuleWithAudit(id, changes, audit) {
+      const [updated] = await db.batch([
+        db.update(tables.masterRules).set(changes).where(eq(tables.masterRules.id, id)).returning({ id: tables.masterRules.id }),
+        db.execute(sql`insert into ${tables.auditEvents} (id, event_type, entity_type, entity_id, details)
+          select ${crypto.randomUUID()}, ${audit.eventType}, ${audit.entityType}, ${id}, ${audit.details ?? null}
+          where exists (select 1 from ${tables.masterRules} where ${eq(tables.masterRules.id, id)})`),
+      ]);
+      return updated[0] ?? null;
+    },
+    async createMasterCodeWithAudit(input, audit) {
+      const id = crypto.randomUUID();
+      await db.batch([
+        db.insert(tables.masterCodes).values({ ...input, id }),
+        db.insert(tables.auditEvents).values({ ...audit, id: crypto.randomUUID(), entityId: id }),
+      ]);
+      return { id };
+    },
+    async updateMasterCodeWithAudit(id, changes, audit) {
+      const [updated] = await db.batch([
+        db.update(tables.masterCodes).set(changes).where(eq(tables.masterCodes.id, id)).returning({ id: tables.masterCodes.id }),
+        db.execute(sql`insert into ${tables.auditEvents} (id, event_type, entity_type, entity_id, details)
+          select ${crypto.randomUUID()}, ${audit.eventType}, ${audit.entityType}, ${id}, ${audit.details ?? null}
+          where exists (select 1 from ${tables.masterCodes} where ${eq(tables.masterCodes.id, id)})`),
+      ]);
+      return updated[0] ?? null;
+    },
+    async updateAlarmWithAudit(id, changes, audit) {
+      const [updated] = await db.batch([
+        db.update(tables.alarms).set(changes).where(eq(tables.alarms.id, id)).returning({ id: tables.alarms.id }),
+        db.execute(sql`insert into ${tables.auditEvents} (id, event_type, entity_type, entity_id, details)
+          select ${crypto.randomUUID()}, ${audit.eventType}, ${audit.entityType}, ${id}, ${audit.details ?? null}
+          where exists (select 1 from ${tables.alarms} where ${eq(tables.alarms.id, id)})`),
+      ]);
+      return updated[0] ?? null;
     },
   };
 }

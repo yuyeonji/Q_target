@@ -128,6 +128,50 @@ test("development seed includes current-demo action plans and action tasks", asy
   assert.equal(developmentSeed.actionPlans.length, 1);
   assert.equal(developmentSeed.actionTasks.length, 2);
   assert.ok(developmentSeed.actionTasks.every((task) => task.actionPlanId === developmentSeed.actionPlans[0].id));
+  assert.deepEqual(
+    developmentSeed.masterRules.map((rule) => rule.ruleCode),
+    ["ALR-001", "ALR-002", "ALR-003", "CVR-001", "CVR-002", "CVR-003"],
+  );
+  assert.deepEqual(
+    developmentSeed.masterCodes.map((code) => code.code),
+    ["PRC-MCH", "ALM-CPK", "STS-HOLD"],
+  );
+});
+
+test("development seed inserts master examples without overwriting matching codes", async () => {
+  const { seedDevelopmentData } = await import("../lib/seed.ts");
+  const batches = [];
+  const database = {
+    insert(table) {
+      return {
+        values(rows) {
+          return {
+            onConflictDoNothing(options) { return { table, rows, conflict: "ignore", options }; },
+            onConflictDoUpdate(options) { return { table, rows, conflict: "update", options }; },
+          };
+        },
+      };
+    },
+    async batch(statements) { batches.push(statements); },
+  };
+  const tables = {
+    alarms: { id: "alarms.id" },
+    targets: { id: "targets.id" },
+    actionPlans: "action-plans",
+    actionTasks: "action-tasks",
+    sampleDelayStages: { alarmId: "sample-delay-stages.alarm-id", stageName: "sample-delay-stages.stage-name" },
+    masterRules: { ruleCode: "master-rules.rule-code" },
+    masterCodes: { code: "master-codes.code" },
+  };
+
+  await seedDevelopmentData(database, tables);
+
+  const ruleStatement = batches[0].find((statement) => statement.table === tables.masterRules);
+  const codeStatement = batches[0].find((statement) => statement.table === tables.masterCodes);
+  assert.equal(ruleStatement.conflict, "ignore");
+  assert.equal(codeStatement.conflict, "ignore");
+  assert.equal(ruleStatement.options.target, "master-rules.rule-code");
+  assert.equal(codeStatement.options.target, "master-codes.code");
 });
 
 test("repository executes awaited Neon HTTP batches for target and action-plan mutations", async () => {
@@ -189,4 +233,76 @@ test("repository executes awaited Neon HTTP batches for target and action-plan m
     { eventType: "action-plan.created", entityType: "action-plan" },
   );
   assert.equal(batchCalls[3].length, 3);
+});
+
+test("repository persists master data and alarm updates in audited batches", async () => {
+  const { createQualityRepository } = await import("../lib/quality-repository.ts");
+  const batches = [];
+  const masterRules = [{ id: "rule-1", ruleCode: "ALR-001", kind: "alarm" }];
+  const masterCodes = [{ id: "code-1", code: "PRC-MCH" }];
+  const fakeDb = {
+    batches,
+    select() {
+      return {
+        from(table) {
+          return {
+            where() { return table === tables.masterRules ? masterRules : []; },
+            orderBy() { return table === tables.masterCodes ? masterCodes : []; },
+          };
+        },
+      };
+    },
+    insert(table) {
+      return { values(values) { return { kind: "insert", table, values }; } };
+    },
+    update(table) {
+      return {
+        set(changes) {
+          return {
+            where() {
+              return { returning() { return { kind: "update", table, changes }; } };
+            },
+          };
+        },
+      };
+    },
+    execute(statement) { return { kind: "execute", statement }; },
+    async batch(statements) {
+      batches.push(statements);
+      return [[{ id: "updated-row" }], []];
+    },
+  };
+  const tables = await import("../db/schema.ts");
+  const repository = createQualityRepository(fakeDb, tables);
+  const audit = { eventType: "master.updated", entityType: "master" };
+
+  assert.deepEqual(await repository.listMasterRules("alarm"), masterRules);
+  assert.deepEqual(await repository.listMasterCodes(), masterCodes);
+
+  await repository.createMasterRuleWithAudit(
+    { ruleCode: "ALR-004", kind: "alarm", name: "신규 규칙", scope: "전체", threshold: "1회", active: true },
+    audit,
+  );
+  assert.equal(fakeDb.batches.at(-1).length, 2);
+
+  assert.deepEqual(
+    await repository.updateMasterRuleWithAudit("rule-1", { active: false }, audit),
+    { id: "updated-row" },
+  );
+  assert.equal(fakeDb.batches.at(-1).length, 2);
+
+  await repository.createMasterCodeWithAudit(
+    { code: "PRC-ASM", name: "조립", category: "공정 코드", active: true },
+    audit,
+  );
+  assert.equal(fakeDb.batches.at(-1).length, 2);
+
+  assert.deepEqual(
+    await repository.updateMasterCodeWithAudit("code-1", { active: false }, audit),
+    { id: "updated-row" },
+  );
+  assert.equal(fakeDb.batches.at(-1).length, 2);
+
+  await repository.updateAlarmWithAudit("alarm-1", { status: "종결", reviewer: "품질 검토팀" }, audit);
+  assert.equal(fakeDb.batches.at(-1).length, 2);
 });

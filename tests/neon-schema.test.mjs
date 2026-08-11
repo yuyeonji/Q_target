@@ -37,6 +37,15 @@ test("persists stable display codes for alarms and management targets", async ()
   assert.match(schema, /uniqueIndex\("targets_target_code_unique"\)\.on\(table\.targetCode\)/);
 });
 
+test("defines unique tables for master rules and master codes", async () => {
+  const schema = await readFile(schemaUrl, "utf8");
+
+  assert.match(schema, /export const masterRules = pgTable\("master_rules"/);
+  assert.match(schema, /export const masterCodes = pgTable\("master_codes"/);
+  assert.match(schema, /uniqueIndex\("master_rules_rule_code_unique"/);
+  assert.match(schema, /uniqueIndex\("master_codes_code_unique"/);
+});
+
 test("creates the database client only from the server DATABASE_URL environment variable", async () => {
   const dbModule = await readFile(dbUrl, "utf8");
 

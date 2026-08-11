@@ -37,6 +37,19 @@ test("Sample Delay stages accept only the four approved stage names", () => {
   );
 });
 
+test("development seed preserves every displayed alarm and target code", () => {
+  assert.deepEqual(
+    seed.developmentSeed.alarms.map((alarm) => alarm.alarmCode),
+    ["AL-99198", "AL-99201", "AL-99202", "AL-99203"],
+  );
+  assert.deepEqual(
+    seed.developmentSeed.targets.map((target) => target.targetCode),
+    ["TRG-8921", "TRG-8922", "TRG-8915", "TRG-8925", "TRG-8910"],
+  );
+  assert.equal(seed.developmentSeed.alarms.length, 4);
+  assert.equal(seed.developmentSeed.targets.length, 5);
+});
+
 test("development seed writes parents before children and is idempotent", async () => {
   const batches = [];
   const database = {

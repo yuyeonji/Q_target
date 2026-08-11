@@ -6,6 +6,7 @@ const schemaUrl = new URL("../db/schema.ts", import.meta.url);
 const dbUrl = new URL("../db/index.ts", import.meta.url);
 const workerDbUrl = new URL("../db/worker.ts", import.meta.url);
 const journalUrl = new URL("../drizzle/meta/_journal.json", import.meta.url);
+const displayCodeMigrationUrl = new URL("../drizzle/0003_persist_demo_identifiers.sql", import.meta.url);
 const d1RouteUrl = new URL("../examples/d1/app/api/notes/route.ts", import.meta.url);
 const d1DbUrl = new URL("../examples/d1/db/index.ts", import.meta.url);
 
@@ -27,6 +28,15 @@ test("exports the persistent quality tables and their parent relationships", asy
   assert.match(schema, /references\(\(\)\s*=>\s*actionPlans\.id\)/);
 });
 
+test("persists stable display codes for alarms and management targets", async () => {
+  const schema = await readFile(schemaUrl, "utf8");
+
+  assert.match(schema, /alarmCode:\s*text\("alarm_code"\)\.notNull\(\)/);
+  assert.match(schema, /targetCode:\s*text\("target_code"\)\.notNull\(\)/);
+  assert.match(schema, /uniqueIndex\("alarms_alarm_code_unique"\)\.on\(table\.alarmCode\)/);
+  assert.match(schema, /uniqueIndex\("targets_target_code_unique"\)\.on\(table\.targetCode\)/);
+});
+
 test("creates the database client only from the server DATABASE_URL environment variable", async () => {
   const dbModule = await readFile(dbUrl, "utf8");
 
@@ -45,6 +55,19 @@ test("records the generated migration as PostgreSQL metadata", async () => {
   const journal = JSON.parse(await readFile(journalUrl, "utf8"));
 
   assert.equal(journal.dialect, "postgresql");
+});
+
+test("backfills display codes before enforcing their unique non-null constraints", async () => {
+  const migration = await readFile(displayCodeMigrationUrl, "utf8");
+
+  assert.match(migration, /ADD COLUMN "alarm_code" text/);
+  assert.match(migration, /ADD COLUMN "target_code" text/);
+  assert.match(migration, /UPDATE "alarms"/);
+  assert.match(migration, /UPDATE "targets"/);
+  assert.match(migration, /ALTER COLUMN "alarm_code" SET NOT NULL/);
+  assert.match(migration, /ALTER COLUMN "target_code" SET NOT NULL/);
+  assert.match(migration, /CREATE UNIQUE INDEX "alarms_alarm_code_unique"/);
+  assert.match(migration, /CREATE UNIQUE INDEX "targets_target_code_unique"/);
 });
 
 test("keeps the standalone D1 notes route on its own D1 database helper", async () => {

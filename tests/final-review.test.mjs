@@ -44,8 +44,8 @@ test("development seed writes parents before children and is idempotent", async 
       return {
         values(rows) {
           return {
-            onConflictDoNothing() {
-              return { table, rows, conflict: "ignore" };
+            onConflictDoNothing(target) {
+              return { table, rows, conflict: "ignore", target };
             },
           };
         },
@@ -54,12 +54,16 @@ test("development seed writes parents before children and is idempotent", async 
     async batch(statements) { batches.push(statements); },
   };
 
+  const stageTable = { alarmId: "sample_delay_stages.alarm_id", stageName: "sample_delay_stages.stage_name" };
   await seed.seedDevelopmentData(database, {
-    alarms: "alarms", targets: "targets", actionPlans: "action-plans", actionTasks: "action-tasks", sampleDelayStages: "sample-delay-stages",
+    alarms: "alarms", targets: "targets", actionPlans: "action-plans", actionTasks: "action-tasks", sampleDelayStages: stageTable,
   });
   assert.equal(batches.length, 1);
   assert.equal(batches[0].length, 5);
   assert.ok(batches[0].every((statement) => statement.conflict === "ignore"));
+  const stageStatement = batches[0][4];
+  assert.ok(stageStatement.rows.every((stage) => /^[0-9a-f-]{36}$/i.test(stage.id)));
+  assert.deepEqual(stageStatement.target.target, ["sample_delay_stages.alarm_id", "sample_delay_stages.stage_name"]);
 });
 
 test("production TypeScript modules use extensionless local imports", async () => {

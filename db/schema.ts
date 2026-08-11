@@ -6,6 +6,7 @@ import {
   pgTable,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
@@ -72,6 +73,7 @@ export const sampleDelayStages = pgTable("sample_delay_stages", {
   isDelayed: boolean("is_delayed").notNull().default(false),
   createdAt: createdAt(),
 }, (table) => [
+  uniqueIndex("sample_delay_stages_alarm_stage_unique").on(table.alarmId, table.stageName),
   check(
     "sample_delay_stages_stage_name_check",
     sql`${table.stageName} in ('샘플 의뢰', '시험 접수', '시험 분석 완료', '판정 지연')`,

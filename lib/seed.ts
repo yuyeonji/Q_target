@@ -26,10 +26,10 @@ export const developmentSeed = {
     },
   ],
   sampleDelayStages: [
-    { alarmId: sampleDelayAlarmId, stageName: "샘플 의뢰", eventAt: new Date("2023-10-12T08:00:00Z"), elapsedMinutes: 0, allowedMinutes: 60, isDelayed: false },
-    { alarmId: sampleDelayAlarmId, stageName: "시험 접수", eventAt: new Date("2023-10-12T09:10:00Z"), elapsedMinutes: 70, allowedMinutes: 60, isDelayed: true },
-    { alarmId: sampleDelayAlarmId, stageName: "시험 분석 완료", eventAt: new Date("2023-10-12T10:40:00Z"), elapsedMinutes: 90, allowedMinutes: 120, isDelayed: false },
-    { alarmId: sampleDelayAlarmId, stageName: "판정 지연", eventAt: new Date("2023-10-12T12:20:00Z"), elapsedMinutes: 100, allowedMinutes: 60, isDelayed: true },
+    { id: "99198000-0000-4000-8000-000000000006", alarmId: sampleDelayAlarmId, stageName: "샘플 의뢰", eventAt: new Date("2023-10-12T08:00:00Z"), elapsedMinutes: 0, allowedMinutes: 60, isDelayed: false },
+    { id: "99198000-0000-4000-8000-000000000007", alarmId: sampleDelayAlarmId, stageName: "시험 접수", eventAt: new Date("2023-10-12T09:10:00Z"), elapsedMinutes: 70, allowedMinutes: 60, isDelayed: true },
+    { id: "99198000-0000-4000-8000-000000000008", alarmId: sampleDelayAlarmId, stageName: "시험 분석 완료", eventAt: new Date("2023-10-12T10:40:00Z"), elapsedMinutes: 90, allowedMinutes: 120, isDelayed: false },
+    { id: "99198000-0000-4000-8000-000000000009", alarmId: sampleDelayAlarmId, stageName: "판정 지연", eventAt: new Date("2023-10-12T12:20:00Z"), elapsedMinutes: 100, allowedMinutes: 60, isDelayed: true },
   ],
   targets: [
     {
@@ -71,7 +71,7 @@ export const developmentSeed = {
   ],
 };
 
-type SeedTables = { alarms: unknown; targets: unknown; actionPlans: unknown; actionTasks: unknown; sampleDelayStages: unknown };
+type SeedTables = { alarms: unknown; targets: unknown; actionPlans: unknown; actionTasks: unknown; sampleDelayStages: any };
 
 export async function seedDevelopmentData(database: { insert: Function; batch: Function }, tables: SeedTables) {
   assertValidSampleDelayStages(developmentSeed.sampleDelayStages);
@@ -80,6 +80,8 @@ export async function seedDevelopmentData(database: { insert: Function; batch: F
     database.insert(tables.targets).values(developmentSeed.targets).onConflictDoNothing(),
     database.insert(tables.actionPlans).values(developmentSeed.actionPlans).onConflictDoNothing(),
     database.insert(tables.actionTasks).values(developmentSeed.actionTasks).onConflictDoNothing(),
-    database.insert(tables.sampleDelayStages).values(developmentSeed.sampleDelayStages).onConflictDoNothing(),
+    database.insert(tables.sampleDelayStages).values(developmentSeed.sampleDelayStages).onConflictDoNothing({
+      target: [tables.sampleDelayStages.alarmId, tables.sampleDelayStages.stageName],
+    }),
   ]);
 }

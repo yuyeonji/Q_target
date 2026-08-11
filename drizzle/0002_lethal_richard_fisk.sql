@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "sample_delay_stages_alarm_stage_unique" ON "sample_delay_stages" USING btree ("alarm_id","stage_name");

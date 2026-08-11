@@ -752,13 +752,10 @@ function Dashboard({
               ⋮
             </button>
           </h3>
-          {/* A focusable scroll region lets keyboard users reach bars that extend past a narrow viewport. */}
-          {/* eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex */}
           <div
             className="chart-scroll"
             role="region"
             aria-label="카테고리별 알람 추세 차트"
-            tabIndex={0}
           >
             <div className="chart">
               <span style={{ height: "40%" }} />
@@ -938,15 +935,15 @@ function AnalysisPanel({
     };
   }, [onClose]);
 
-  // The backdrop itself is pointer-only; the close button and Escape key are its keyboard equivalents.
-  // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
   return (
-    <div
-      className="overlay"
-      onClick={(event) => {
-        if (event.currentTarget === event.target) onClose();
-      }}
-    >
+    <div className="overlay">
+      <button
+        type="button"
+        className="overlay-dismiss"
+        style={{ position: "absolute", inset: 0, border: 0, background: "transparent" }}
+        aria-label="분석 패널 닫기"
+        onClick={onClose}
+      />
       <aside
         ref={dialogRef}
         className="drawer"
@@ -1045,10 +1042,8 @@ function ScrollTable({
   label: string;
   children: React.ReactNode;
 }) {
-  // Scrollable data regions must be focusable so keyboard users can pan them horizontally.
-  // eslint-disable-next-line jsx-a11y/no-noninteractive-tabindex
   return (
-    <div className="table-scroll" role="region" aria-label={label} tabIndex={0}>
+    <div className="table-scroll" role="region" aria-label={label}>
       {children}
     </div>
   );
@@ -1896,7 +1891,7 @@ function TargetList({
                   <td>
                     <Status>{r.status}</Status>
                   </td>
-                  <td>◉　{r.owner}</td>
+                  <td>◉ {r.owner}</td>
                   <td className={r.priority === "긴급" ? "red-text" : ""}>
                     {r.priority === "긴급" ? "! " : ""}
                     {r.priority}
@@ -1966,7 +1961,7 @@ function AlarmDrawer({
           <button aria-label="상세 닫기" className="close" onClick={onClose}>
             ×
           </button>
-          <span className="badge">NEW ALARM　 ID: {alarm.id}</span>
+          <span className="badge">NEW ALARM ID: {alarm.id}</span>
           <h2>{alarm.item}</h2>
           <p className="red-text">
             CPK 값이 1.33 임계값 미만으로 하락했습니다.
@@ -2103,7 +2098,7 @@ function RelatedInfoAccordion() {
               className="related-info-control"
               aria-expanded={expanded}
               aria-controls={panelId}
-              onClick={() => setOpen(expanded ? "" : label)}
+              onClick={() => setOpen(label)}
             >
               {label}
             </button>
@@ -2167,7 +2162,7 @@ function SampleDelayDrawer({
             </div>
             <div className="sample-delay-summary">
               <b>경과 시간</b>
-              <span>11:08</span>
+              <span>68분</span>
               <b>허용 기준</b>
               <span>30분</span>
               <b>초과 시간</b>
@@ -2204,6 +2199,13 @@ function NewCase({
 }) {
   const [name, setName] = useState("");
   const [priority, setPriority] = useState("중간");
+  const nameInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const focusFrame = window.requestAnimationFrame(() => nameInputRef.current?.focus());
+    return () => window.cancelAnimationFrame(focusFrame);
+  }, []);
+
   return (
     <div className="overlay modal-overlay">
       <section className="case-modal">
@@ -2215,7 +2217,7 @@ function NewCase({
         <label>
           관리항목명
           <input
-            autoFocus
+            ref={nameInputRef}
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="예: 설비 진동 기준 초과"
@@ -2292,10 +2294,10 @@ function ActionPlan({
               <div>
                 <b>측정 데이터</b>
                 <p>
-                  현재값　<strong className="red-text">3.82</strong>　 기준값　
+                  현재값 <strong className="red-text">3.82</strong> 기준값{" "}
                   <strong>2.50</strong>
                 </p>
-                <small>발생일시　2023-11-20 14:22:05</small>
+                <small>발생일시 2023-11-20 14:22:05</small>
               </div>
               <div>
                 <b>최근 30일 발생 추이</b>

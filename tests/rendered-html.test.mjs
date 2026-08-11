@@ -146,8 +146,9 @@ test("makes narrow tables and charts horizontally reachable", async () => {
   const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
 
   assert.match(page, /function ScrollTable/);
-  assert.match(page, /className="table-scroll"[\s\S]*?role="region"[\s\S]*?aria-label=\{label\}[\s\S]*?tabIndex=\{0\}/);
-  assert.match(page, /className="chart-scroll"[\s\S]*?role="region"[\s\S]*?aria-label="카테고리별 알람 추세 차트"[\s\S]*?tabIndex=\{0\}/);
+  assert.match(page, /className="table-scroll"[\s\S]*?role="region"[\s\S]*?aria-label=\{label\}/);
+  assert.match(page, /className="chart-scroll"[\s\S]*?role="region"[\s\S]*?aria-label="카테고리별 알람 추세 차트"/);
+  assert.doesNotMatch(page, /className="(?:table|chart)-scroll"[^>]*tabIndex=\{0\}/);
   assert.match(css, /\.table-scroll,\.chart-scroll\s*\{[^}]*overflow-x:\s*auto[^}]*\}/);
   assert.match(css, /@media\s*\(max-width:\s*600px\)[\s\S]*?\.chart\s*\{[^}]*min-width:\s*520px[^}]*\}/);
 });
@@ -161,6 +162,7 @@ test("analysis dialog manages focus, Escape, and background inertness", async ()
   assert.match(source, /event\.key !== "Tab"/);
   assert.match(source, /previousFocus\.current\?\.focus\(\)/);
   assert.match(source, /ref=\{dialogRef\}[^>]*tabIndex=\{-1\}/);
+  assert.match(source, /className="overlay-dismiss"[\s\S]*?aria-label="분석 패널 닫기"[\s\S]*?onClick=\{onClose\}/);
   assert.match(source, /className="sidebar" inert=\{analysisPanel \? true : undefined\}/);
   assert.match(source, /className="workspace" inert=\{analysisPanel \? true : undefined\}/);
 });
@@ -185,11 +187,17 @@ test("uses an accessible related-information accordion and sample-delay workflow
   const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
   const alarmDrawer =
     page.match(/function AlarmDrawer\([\s\S]*?\n}\n\nconst relatedInfo =/)?.[0] ?? "";
+  const relatedAccordion =
+    page.match(/function RelatedInfoAccordion\(\)[\s\S]*?\n}\n\nfunction SampleDelayDrawer/)?.[0] ?? "";
+  const sampleDelayDrawer =
+    page.match(/function SampleDelayDrawer\([\s\S]*?\n}\n\nfunction NewCase/)?.[0] ?? "";
 
   assert.match(page, /function RelatedInfoAccordion/);
   assert.match(page, /aria-expanded=\{expanded\}/);
   assert.match(page, /aria-controls=\{panelId\}/);
   assert.match(page, /id=\{panelId\} hidden=\{!expanded\}/);
+  assert.match(relatedAccordion, /onClick=\{\(\) => setOpen\(label\)\}/);
+  assert.doesNotMatch(relatedAccordion, /setOpen\(expanded \? "" : label\)/);
   assert.doesNotMatch(alarmDrawer, /\btab\??:|\bsetTab\??:|const tabs =|drawer-tab-content/);
   assert.doesNotMatch(page, /drawer-tabs|drawer-tab-content|demo-attachment/);
   assert.doesNotMatch(css, /\.drawer-tabs|\.drawer-tab-content|\.demo-attachment/);
@@ -199,6 +207,10 @@ test("uses an accessible related-information accordion and sample-delay workflow
   assert.match(page, /경과 시간/);
   assert.match(page, /허용 기준/);
   assert.match(page, /초과 시간/);
+  assert.match(sampleDelayDrawer, /<b>경과 시간<\/b>\s*<span>68분<\/span>/);
+  assert.match(sampleDelayDrawer, /<b>허용 기준<\/b>\s*<span>30분<\/span>/);
+  assert.match(sampleDelayDrawer, /<b>초과 시간<\/b>\s*<span>38분<\/span>/);
+  assert.doesNotMatch(sampleDelayDrawer, /<b>경과 시간<\/b>\s*<span>11:08<\/span>/);
   assert.match(css, /\.related-info-control/);
   assert.match(css, /\.sample-delay-stage\.delay/);
 });

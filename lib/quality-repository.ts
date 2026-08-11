@@ -1,5 +1,5 @@
 import { asc, desc, eq, sql } from "drizzle-orm";
-import { getDb } from "@/db";
+import { getDb } from "../db/index.ts";
 import {
   actionPlans,
   actionTasks,
@@ -7,7 +7,7 @@ import {
   auditEvents,
   sampleDelayStages,
   targets,
-} from "@/db/schema";
+} from "../db/schema.ts";
 
 export type NewTarget = {
   name: string;

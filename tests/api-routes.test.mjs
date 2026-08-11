@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { readFile } from "node:fs/promises";
 
 async function loadHandlers() {
   return import("../lib/route-handlers.mjs");
@@ -130,8 +129,62 @@ test("development seed includes current-demo action plans and action tasks", asy
   assert.ok(developmentSeed.actionTasks.every((task) => task.actionPlanId === developmentSeed.actionPlans[0].id));
 });
 
-test("production repository uses Neon HTTP batch operations instead of unsupported interactive transactions", async () => {
-  const source = await readFile(new URL("../lib/quality-repository.ts", import.meta.url), "utf8");
-  assert.match(source, /db\.batch\(/);
-  assert.doesNotMatch(source, /db\.transaction\(/);
+test("repository executes awaited Neon HTTP batches for target and action-plan mutations", async () => {
+  const { createQualityRepository } = await import("../lib/quality-repository.ts");
+  const batchCalls = [];
+  let releaseTargetBatch;
+  const targetBatchGate = new Promise((resolve) => { releaseTargetBatch = resolve; });
+  const fakeDb = {
+    insert(table) {
+      return { values(values) { return { kind: "insert", table, values }; } };
+    },
+    update(table) {
+      return {
+        set(changes) {
+          return {
+            where() {
+              return { returning() { return { kind: "update", table, changes }; } };
+            },
+          };
+        },
+      };
+    },
+    execute(statement) { return { kind: "execute", statement }; },
+    async batch(statements) {
+      batchCalls.push(statements);
+      if (batchCalls.length === 1) await targetBatchGate;
+      if (batchCalls.length === 2) return [[{ id: "updated-target" }], []];
+      if (batchCalls.length === 3) return [[], []];
+      return [];
+    },
+    transaction() { throw new Error("unsupported interactive transaction must not run"); },
+  };
+  const repository = createQualityRepository(fakeDb);
+
+  let targetResolved = false;
+  const targetPromise = repository.createTargetWithAudit(
+    { name: "관리대상", status: "대기", owner: "홍길동", priority: "높음" },
+    { eventType: "target.created", entityType: "target" },
+  ).then((result) => { targetResolved = true; return result; });
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(batchCalls.length, 1);
+  assert.equal(batchCalls[0].length, 2);
+  assert.equal(targetResolved, false);
+  releaseTargetBatch();
+  const created = await targetPromise;
+  assert.match(created.id, /^[0-9a-f-]{36}$/i);
+
+  const updated = await repository.updateTargetWithAudit("target-1", { status: "진행중" }, { eventType: "target.updated", entityType: "target" });
+  assert.deepEqual(updated, { id: "updated-target" });
+  assert.equal(batchCalls[1].length, 2);
+
+  const missing = await repository.updateTargetWithAudit("missing-target", { status: "진행중" }, { eventType: "target.updated", entityType: "target" });
+  assert.equal(missing, null);
+  assert.equal(batchCalls[2].length, 2);
+
+  await repository.createActionPlanWithAudit(
+    { status: "진행중", tasks: [{ description: "원인 확인", owner: "홍길동" }] },
+    { eventType: "action-plan.created", entityType: "action-plan" },
+  );
+  assert.equal(batchCalls[3].length, 3);
 });

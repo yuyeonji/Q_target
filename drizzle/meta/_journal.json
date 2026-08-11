@@ -8,6 +8,13 @@
       "when": 1786416551011,
       "tag": "0000_cynical_steel_serpent",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1786419221943,
+      "tag": "0001_mature_green_goblin",
+      "breakpoints": true
     }
   ]
 }

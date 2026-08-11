@@ -37,6 +37,7 @@ type Target = {
   owner: string;
   priority: string;
   due: string;
+  sourceAlarmId?: string;
 };
 type Rule = {
   id: string;
@@ -260,6 +261,7 @@ export default function Home() {
   const [selectedTarget, setSelectedTarget] = useState<Target | null>(null);
   const [alarm, setAlarm] = useState<Alarm | null>(null);
   const [actionPlan, setActionPlan] = useState(false);
+  const [actionPlanAlarmId, setActionPlanAlarmId] = useState<string | null>(null);
   const [newCase, setNewCase] = useState(false);
   const [masterTab, setMasterTab] = useState("알람 규칙");
   const [notice, setNotice] = useState("");
@@ -316,6 +318,7 @@ export default function Home() {
         owner: item.owner,
         priority: item.priority,
         due: item.dueDate ? item.dueDate.slice(0, 10) : "미정",
+        sourceAlarmId: item.sourceAlarmId ?? undefined,
       })));
       setDataState("ready");
     } catch {
@@ -551,6 +554,7 @@ export default function Home() {
               setFilter={setTargetFilter}
               onOpen={(target) => {
                 setSelectedTarget(target);
+                setActionPlanAlarmId(target.sourceAlarmId ?? null);
                 setActionPlan(true);
               }}
               onExport={() =>
@@ -651,6 +655,8 @@ export default function Home() {
                     : item,
                 ),
               );
+              setSelectedTarget(targetItems.find((target) => target.sourceAlarmId === alarm.id) ?? null);
+              setActionPlanAlarmId(alarm.id);
               setAlarm(null);
               setActionPlan(true);
             }}
@@ -673,6 +679,8 @@ export default function Home() {
                     : item,
                 ),
               );
+              setSelectedTarget(targetItems.find((target) => target.sourceAlarmId === alarm.id) ?? null);
+              setActionPlanAlarmId(alarm.id);
               setAlarm(null);
               setActionPlan(true);
             }}
@@ -694,6 +702,8 @@ export default function Home() {
           onSave={async () => {
             try {
               await saveActionPlan({
+                alarmId: actionPlanAlarmId,
+                targetId: selectedTarget?.id ?? null,
                 status: "진행 중",
                 tasks: tasks.map((task) => ({
                   description: task.title,

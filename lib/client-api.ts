@@ -16,6 +16,7 @@ export type PersistedTarget = {
   owner: string;
   priority: string;
   dueDate?: string | null;
+  sourceAlarmId?: string | null;
 };
 
 export type SampleDelayStage = {
@@ -28,6 +29,7 @@ export type SampleDelayStage = {
 
 export type ActionPlanInput = {
   alarmId?: string | null;
+  targetId?: string | null;
   rootCause?: string | null;
   immediateAction?: string | null;
   preventiveAction?: string | null;

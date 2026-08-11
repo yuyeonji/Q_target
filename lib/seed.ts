@@ -1,6 +1,14 @@
 export const sampleDelayStageNames = ["샘플 의뢰", "시험 접수", "시험 분석 완료", "판정 지연"] as const;
+const sampleDelayStageNameSet = new Set<string>(sampleDelayStageNames);
+
+export function assertValidSampleDelayStages(stages: Array<{ stageName: string }>) {
+  if (!stages.every((stage) => sampleDelayStageNameSet.has(stage.stageName))) {
+    throw new Error("Invalid Sample Delay stage");
+  }
+}
 
 const sampleDelayAlarmId = "99198000-0000-4000-8000-000000000001";
+const sampleDelayTargetId = "99198000-0000-4000-8000-000000000002";
 const sampleDelayActionPlanId = "99198000-0000-4000-8000-000000000003";
 
 export const developmentSeed = {
@@ -25,7 +33,7 @@ export const developmentSeed = {
   ],
   targets: [
     {
-      id: "99198000-0000-4000-8000-000000000002",
+      id: sampleDelayTargetId,
       name: "베어링 하우징 CPK 개선",
       status: "진행중",
       owner: "박실비",
@@ -38,6 +46,7 @@ export const developmentSeed = {
     {
       id: sampleDelayActionPlanId,
       alarmId: sampleDelayAlarmId,
+      targetId: sampleDelayTargetId,
       rootCause: "시험 접수와 판정 단계의 인수인계 지연",
       immediateAction: "담당자에게 지연 알림 및 우선 판정 요청",
       preventiveAction: "단계별 SLA 알림을 설정",
@@ -61,3 +70,16 @@ export const developmentSeed = {
     },
   ],
 };
+
+type SeedTables = { alarms: unknown; targets: unknown; actionPlans: unknown; actionTasks: unknown; sampleDelayStages: unknown };
+
+export async function seedDevelopmentData(database: { insert: Function; batch: Function }, tables: SeedTables) {
+  assertValidSampleDelayStages(developmentSeed.sampleDelayStages);
+  await database.batch([
+    database.insert(tables.alarms).values(developmentSeed.alarms).onConflictDoNothing(),
+    database.insert(tables.targets).values(developmentSeed.targets).onConflictDoNothing(),
+    database.insert(tables.actionPlans).values(developmentSeed.actionPlans).onConflictDoNothing(),
+    database.insert(tables.actionTasks).values(developmentSeed.actionTasks).onConflictDoNothing(),
+    database.insert(tables.sampleDelayStages).values(developmentSeed.sampleDelayStages).onConflictDoNothing(),
+  ]);
+}

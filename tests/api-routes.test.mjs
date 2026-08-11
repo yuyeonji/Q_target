@@ -97,7 +97,7 @@ test("target and action-plan mutations save their audit events through atomic re
 
   const plan = await createActionPlanRouteHandlers(repository).POST(new Request("http://app.local/api/action-plans", {
     method: "POST", headers: { "content-type": "application/json" },
-    body: JSON.stringify({ status: "진행중", tasks: [{ description: "원인 확인", owner: "홍길동" }] }),
+    body: JSON.stringify({ status: "진행중", alarmId: "alarm-1", tasks: [{ description: "원인 확인", owner: "홍길동" }] }),
   }));
   assert.equal(plan.status, 201);
   assert.deepEqual(repository.auditEvents.map((event) => event.eventType), ["target.created", "target.updated", "action-plan.created"]);
@@ -111,7 +111,7 @@ test("a failed atomic mutation leaves no partial target, action-plan, or audit d
     method: "POST", body: JSON.stringify({ name: "새 관리대상", status: "대기중", owner: "홍길동", priority: "높음" }),
   }));
   const plan = await createActionPlanRouteHandlers(repository).POST(new Request("http://app.local/api/action-plans", {
-    method: "POST", body: JSON.stringify({ status: "진행중" }),
+    method: "POST", body: JSON.stringify({ status: "진행중", alarmId: "alarm-1" }),
   }));
 
   assert.equal(target.status, 500);
@@ -159,7 +159,8 @@ test("repository executes awaited Neon HTTP batches for target and action-plan m
     },
     transaction() { throw new Error("unsupported interactive transaction must not run"); },
   };
-  const repository = createQualityRepository(fakeDb);
+  const tables = await import("../db/schema.ts");
+  const repository = createQualityRepository(fakeDb, tables);
 
   let targetResolved = false;
   const targetPromise = repository.createTargetWithAudit(
@@ -183,7 +184,7 @@ test("repository executes awaited Neon HTTP batches for target and action-plan m
   assert.equal(batchCalls[2].length, 2);
 
   await repository.createActionPlanWithAudit(
-    { status: "진행중", tasks: [{ description: "원인 확인", owner: "홍길동" }] },
+    { status: "진행중", alarmId: "alarm-1", tasks: [{ description: "원인 확인", owner: "홍길동" }] },
     { eventType: "action-plan.created", entityType: "action-plan" },
   );
   assert.equal(batchCalls[3].length, 3);

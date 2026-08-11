@@ -1,5 +1,6 @@
 import {
   boolean,
+  check,
   integer,
   jsonb,
   pgTable,
@@ -7,6 +8,7 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 
 const id = () => uuid("id").defaultRandom().primaryKey();
 const createdAt = () => timestamp("created_at", { withTimezone: true }).defaultNow().notNull();
@@ -38,6 +40,7 @@ export const targets = pgTable("targets", {
 export const actionPlans = pgTable("action_plans", {
   id: id(),
   alarmId: uuid("alarm_id").references(() => alarms.id),
+  targetId: uuid("target_id").references(() => targets.id),
   rootCause: text("root_cause"),
   immediateAction: text("immediate_action"),
   preventiveAction: text("preventive_action"),
@@ -68,7 +71,12 @@ export const sampleDelayStages = pgTable("sample_delay_stages", {
   allowedMinutes: integer("allowed_minutes").notNull(),
   isDelayed: boolean("is_delayed").notNull().default(false),
   createdAt: createdAt(),
-});
+}, (table) => [
+  check(
+    "sample_delay_stages_stage_name_check",
+    sql`${table.stageName} in ('샘플 의뢰', '시험 접수', '시험 분석 완료', '판정 지연')`,
+  ),
+]);
 
 export const auditEvents = pgTable("audit_events", {
   id: id(),

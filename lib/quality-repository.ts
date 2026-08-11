@@ -1,6 +1,7 @@
 import { asc, desc, eq, sql } from "drizzle-orm";
 
 export type NewTarget = {
+  targetCode: string;
   name: string;
   status: string;
   owner: string;

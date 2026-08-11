@@ -17,16 +17,22 @@ function withFetch(response, run) {
 }
 
 test("list helpers request persisted alarm and target endpoints", async () => {
-  await withFetch(new Response(JSON.stringify({ alarms: [{ id: "AL-1" }] }), { status: 200 }), async (calls) => {
-    assert.deepEqual(await client.listAlarms(), [{ id: "AL-1" }]);
+  await withFetch(new Response(JSON.stringify({ alarms: [{ id: "99198000-0000-4000-8000-000000000001", alarmCode: "AL-99198" }] }), { status: 200 }), async (calls) => {
+    assert.deepEqual(await client.listAlarms(), [{ id: "99198000-0000-4000-8000-000000000001", alarmCode: "AL-99198" }]);
     assert.equal(calls[0][0], "/api/alarms");
     assert.equal(calls[0][1]?.method, "GET");
   });
 
-  await withFetch(new Response(JSON.stringify({ targets: [{ id: "T-1" }] }), { status: 200 }), async (calls) => {
-    assert.deepEqual(await client.listTargets(), [{ id: "T-1" }]);
+  await withFetch(new Response(JSON.stringify({ targets: [{ id: "89210000-0000-4000-8000-000000000001", targetCode: "TRG-8921" }] }), { status: 200 }), async (calls) => {
+    assert.deepEqual(await client.listTargets(), [{ id: "89210000-0000-4000-8000-000000000001", targetCode: "TRG-8921" }]);
     assert.equal(calls[0][0], "/api/targets");
   });
+});
+
+test("client records model persisted display codes", async () => {
+  const source = await readFile(new URL("../lib/client-api.ts", import.meta.url), "utf8");
+  assert.match(source, /alarmCode:\s*string/);
+  assert.match(source, /targetCode:\s*string/);
 });
 
 test("mutation helpers use JSON API contracts", async () => {

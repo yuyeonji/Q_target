@@ -16,6 +16,7 @@ const createdAt = () => timestamp("created_at", { withTimezone: true }).defaultN
 
 export const alarms = pgTable("alarms", {
   id: id(),
+  alarmCode: text("alarm_code").notNull(),
   occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
   item: text("item").notNull(),
   type: text("type").notNull(),
@@ -25,10 +26,13 @@ export const alarms = pgTable("alarms", {
   reviewer: text("reviewer"),
   reviewDeadline: timestamp("review_deadline", { withTimezone: true }),
   createdAt: createdAt(),
-});
+}, (table) => [
+  uniqueIndex("alarms_alarm_code_unique").on(table.alarmCode),
+]);
 
 export const targets = pgTable("targets", {
   id: id(),
+  targetCode: text("target_code").notNull(),
   name: text("name").notNull(),
   status: text("status").notNull(),
   owner: text("owner").notNull(),
@@ -36,7 +40,9 @@ export const targets = pgTable("targets", {
   dueDate: timestamp("due_date", { withTimezone: true }),
   sourceAlarmId: uuid("source_alarm_id").references(() => alarms.id),
   createdAt: createdAt(),
-});
+}, (table) => [
+  uniqueIndex("targets_target_code_unique").on(table.targetCode),
+]);
 
 export const actionPlans = pgTable("action_plans", {
   id: id(),

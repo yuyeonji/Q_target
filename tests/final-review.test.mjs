@@ -37,6 +37,41 @@ test("Sample Delay stages accept only the four approved stage names", () => {
   );
 });
 
+test("development seed preserves every displayed alarm and target code", () => {
+  assert.deepEqual(
+    seed.developmentSeed.alarms.map((alarm) => alarm.alarmCode),
+    ["AL-99198", "AL-99201", "AL-99202", "AL-99203"],
+  );
+  assert.deepEqual(
+    seed.developmentSeed.targets.map((target) => target.targetCode),
+    ["TRG-8921", "TRG-8922", "TRG-8915", "TRG-8925", "TRG-8910"],
+  );
+  assert.equal(seed.developmentSeed.alarms.length, 4);
+  assert.equal(seed.developmentSeed.targets.length, 5);
+});
+
+test("development seed exactly restores the existing displayed records", () => {
+  assert.deepEqual(
+    seed.developmentSeed.alarms.map(({ alarmCode, item, type, process, line, status, reviewer }) => ({ alarmCode, item, type, process, line, status, reviewer })),
+    [
+      { alarmCode: "AL-99198", item: "Bearing Housing A1", type: "Sample Delay", process: "Machining", line: "Line 4", status: "심각", reviewer: "품질 검토팀" },
+      { alarmCode: "AL-99201", item: "Bearing Housing A1", type: "CPK Drop", process: "Machining", line: "Line 4", status: "신규", reviewer: "-" },
+      { alarmCode: "AL-99202", item: "Stator Core B2", type: "Defect Rate", process: "Assembly", line: "Line 2", status: "검토중", reviewer: "S. Miller" },
+      { alarmCode: "AL-99203", item: "Rotor Assembly C", type: "Trend Alert", process: "Testing", line: "Line 1", status: "종결", reviewer: "시스템" },
+    ],
+  );
+  assert.deepEqual(
+    seed.developmentSeed.targets.map(({ targetCode, name, status, owner, priority, dueDate }) => ({ targetCode, name, status, owner, priority, due: dueDate.toISOString().slice(0, 10) })),
+    [
+      { targetCode: "TRG-8921", name: "터빈 압파 교정", status: "진행 중", owner: "Sarah Chen", priority: "높음", due: "2023-11-15" },
+      { targetCode: "TRG-8922", name: "HVAC 시스템 오버홀", status: "대기", owner: "Marcus Rossi", priority: "중간", due: "2023-11-20" },
+      { targetCode: "TRG-8915", name: "원자로 코어 센서 동기화", status: "심각", owner: "John Doe", priority: "긴급", due: "2023-10-31" },
+      { targetCode: "TRG-8925", name: "파이프라인 압력 테스트", status: "대기", owner: "Aisha Patel", priority: "낮음", due: "2023-12-05" },
+      { targetCode: "TRG-8910", name: "안전 장비 재고 확인", status: "완료", owner: "Marcus Rossi", priority: "중간", due: "2023-10-25" },
+    ],
+  );
+});
+
 test("development seed writes parents before children and is idempotent", async () => {
   const batches = [];
   const database = {
@@ -47,6 +82,9 @@ test("development seed writes parents before children and is idempotent", async 
             onConflictDoNothing(target) {
               return { table, rows, conflict: "ignore", target };
             },
+            onConflictDoUpdate(options) {
+              return { table, rows, conflict: "update", options };
+            },
           };
         },
       };
@@ -56,11 +94,15 @@ test("development seed writes parents before children and is idempotent", async 
 
   const stageTable = { alarmId: "sample_delay_stages.alarm_id", stageName: "sample_delay_stages.stage_name" };
   await seed.seedDevelopmentData(database, {
-    alarms: "alarms", targets: "targets", actionPlans: "action-plans", actionTasks: "action-tasks", sampleDelayStages: stageTable,
+    alarms: { id: "alarms.id" }, targets: { id: "targets.id" }, actionPlans: "action-plans", actionTasks: "action-tasks", sampleDelayStages: stageTable,
   });
   assert.equal(batches.length, 1);
   assert.equal(batches[0].length, 5);
-  assert.ok(batches[0].every((statement) => statement.conflict === "ignore"));
+  assert.equal(batches[0][0].conflict, "update");
+  assert.equal(batches[0][1].conflict, "update");
+  assert.ok(batches[0].slice(2).every((statement) => statement.conflict === "ignore"));
+  assert.equal(batches[0][0].options.target, "alarms.id");
+  assert.equal(batches[0][1].options.target, "targets.id");
   const stageStatement = batches[0][4];
   assert.ok(stageStatement.rows.every((stage) => /^[0-9a-f-]{36}$/i.test(stage.id)));
   assert.deepEqual(stageStatement.target.target, ["sample_delay_stages.alarm_id", "sample_delay_stages.stage_name"]);

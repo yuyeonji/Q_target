@@ -44,6 +44,13 @@ test("includes interactive demo controls in the client page", async () => {
   assert.match(source, /신규 케이스 등록/);
 });
 
+test("maps persisted display codes while retaining UUID action IDs", async () => {
+  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  assert.match(page, /code:\s*item\.alarmCode/);
+  assert.match(page, /code:\s*item\.targetCode/);
+  assert.match(page, /id:\s*item\.id/);
+});
+
 test("includes complete demo control surfaces", async () => {
   const source = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   assert.match(source, /알림 센터/);

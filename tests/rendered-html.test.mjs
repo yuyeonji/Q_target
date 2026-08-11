@@ -207,10 +207,11 @@ test("uses an accessible related-information accordion and sample-delay workflow
   assert.match(page, /경과 시간/);
   assert.match(page, /허용 기준/);
   assert.match(page, /초과 시간/);
-  assert.match(sampleDelayDrawer, /<b>경과 시간<\/b>\s*<span>68분<\/span>/);
-  assert.match(sampleDelayDrawer, /<b>허용 기준<\/b>\s*<span>30분<\/span>/);
-  assert.match(sampleDelayDrawer, /<b>초과 시간<\/b>\s*<span>38분<\/span>/);
-  assert.doesNotMatch(sampleDelayDrawer, /<b>경과 시간<\/b>\s*<span>11:08<\/span>/);
+  assert.match(sampleDelayDrawer, /const sampleDelaySummary = persistedStages\?\.length/);
+  assert.match(sampleDelayDrawer, /overageMinutes: Math\.max\(0, elapsedMinutes - allowedMinutes\)/);
+  assert.match(sampleDelayDrawer, /<span>\{sampleDelaySummary\.elapsedMinutes\}분<\/span>/);
+  assert.match(sampleDelayDrawer, /<span>\{sampleDelaySummary\.allowedMinutes\}분<\/span>/);
+  assert.match(sampleDelayDrawer, /<span>\{sampleDelaySummary\.overageMinutes\}분<\/span>/);
   assert.match(css, /\.related-info-control/);
   assert.match(css, /\.sample-delay-stage\.delay/);
 });

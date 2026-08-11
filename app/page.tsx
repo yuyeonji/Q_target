@@ -1,6 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  getAlarmDetail,
+  listAlarms,
+  listTargets,
+  saveActionPlan,
+  type SampleDelayStage,
+  updateTarget,
+} from "@/lib/client-api";
 
 type ViewId = "dashboard" | "alarms" | "targets" | "master";
 type AnalysisPanel = "trend" | "distribution" | null;
@@ -29,6 +37,7 @@ type Target = {
   owner: string;
   priority: string;
   due: string;
+  sourceAlarmId?: string;
 };
 type Rule = {
   id: string;
@@ -252,6 +261,7 @@ export default function Home() {
   const [selectedTarget, setSelectedTarget] = useState<Target | null>(null);
   const [alarm, setAlarm] = useState<Alarm | null>(null);
   const [actionPlan, setActionPlan] = useState(false);
+  const [actionPlanAlarmId, setActionPlanAlarmId] = useState<string | null>(null);
   const [newCase, setNewCase] = useState(false);
   const [masterTab, setMasterTab] = useState("알람 규칙");
   const [notice, setNotice] = useState("");
@@ -276,12 +286,65 @@ export default function Home() {
   const [taskDue, setTaskDue] = useState("미정");
   const [alarmItems, setAlarmItems] = useState(alarms);
   const [targetItems, setTargetItems] = useState(initialTargets);
+  const [dataState, setDataState] = useState<"loading" | "ready" | "error">("loading");
+  const [sampleDelayStages, setSampleDelayStages] = useState<SampleDelayStage[] | null>(null);
   const [alarmRules, setAlarmRules] = useState(initialAlarmRules);
   const [conversionRules, setConversionRules] = useState(
     initialConversionRules,
   );
   const [codes, setCodes] = useState(initialCodes);
   const closeAnalysis = useCallback(() => setAnalysisPanel(null), []);
+  const loadPersistedData = useCallback(async () => {
+    setDataState("loading");
+    try {
+      const [persistedAlarms, persistedTargets] = await Promise.all([
+        listAlarms(),
+        listTargets(),
+      ]);
+      setAlarmItems(persistedAlarms.map((item) => ({
+        id: item.id,
+        time: new Date(item.occurredAt).toLocaleString("sv-SE").replace("T", " "),
+        item: item.item,
+        type: item.type,
+        process: item.process,
+        line: item.line,
+        status: item.status as AlarmStatus,
+        reviewer: item.reviewer ?? "-",
+      })));
+      setTargetItems(persistedTargets.map((item) => ({
+        id: item.id,
+        name: item.name,
+        status: item.status,
+        owner: item.owner,
+        priority: item.priority,
+        due: item.dueDate ? item.dueDate.slice(0, 10) : "미정",
+        sourceAlarmId: item.sourceAlarmId ?? undefined,
+      })));
+      setDataState("ready");
+    } catch {
+      setDataState("error");
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadPersistedData();
+  }, [loadPersistedData]);
+
+  useEffect(() => {
+    if (!alarm || alarm.type !== "Sample Delay") {
+      setSampleDelayStages(null);
+      return;
+    }
+    let active = true;
+    void getAlarmDetail(alarm.id)
+      .then((detail) => {
+        if (active) setSampleDelayStages(detail.sampleDelayStages);
+      })
+      .catch(() => {
+        if (active) setSampleDelayStages(null);
+      });
+    return () => { active = false; };
+  }, [alarm]);
 
   const visibleAlarms = useMemo(
     () =>
@@ -415,6 +478,16 @@ export default function Home() {
         </header>
 
         <div className="content">
+          {dataState !== "ready" && (
+            <div className="data-status" role="status">
+              {dataState === "loading"
+                ? "저장된 데이터를 불러오는 중입니다."
+                : "저장된 데이터를 불러오지 못했습니다. 현재 화면의 예시 데이터를 표시합니다."}
+              {dataState === "error" && (
+                <button onClick={() => void loadPersistedData()}>다시 시도</button>
+              )}
+            </div>
+          )}
           {view === "dashboard" && (
             <Dashboard
               period={period}
@@ -481,6 +554,7 @@ export default function Home() {
               setFilter={setTargetFilter}
               onOpen={(target) => {
                 setSelectedTarget(target);
+                setActionPlanAlarmId(target.sourceAlarmId ?? null);
                 setActionPlan(true);
               }}
               onExport={() =>
@@ -565,6 +639,7 @@ export default function Home() {
         (alarm.type === "Sample Delay" ? (
           <SampleDelayDrawer
             alarm={alarm}
+            stages={sampleDelayStages}
             onClose={() => setAlarm(null)}
             onCloseAlarm={() =>
               updateAlarm("종결", "알람을 조치 불필요로 종결했습니다.")
@@ -580,6 +655,8 @@ export default function Home() {
                     : item,
                 ),
               );
+              setSelectedTarget(targetItems.find((target) => target.sourceAlarmId === alarm.id) ?? null);
+              setActionPlanAlarmId(alarm.id);
               setAlarm(null);
               setActionPlan(true);
             }}
@@ -602,6 +679,8 @@ export default function Home() {
                     : item,
                 ),
               );
+              setSelectedTarget(targetItems.find((target) => target.sourceAlarmId === alarm.id) ?? null);
+              setActionPlanAlarmId(alarm.id);
               setAlarm(null);
               setActionPlan(true);
             }}
@@ -620,7 +699,25 @@ export default function Home() {
           onAdd={addTask}
           onDelete={(id) => setTasks(tasks.filter((task) => task.id !== id))}
           onClose={() => setActionPlan(false)}
-          onSave={() => {
+          onSave={async () => {
+            try {
+              await saveActionPlan({
+                alarmId: actionPlanAlarmId,
+                targetId: selectedTarget?.id ?? null,
+                status: "진행 중",
+                tasks: tasks.map((task) => ({
+                  description: task.title,
+                  owner: task.owner,
+                  dueDate: task.due === "미정" ? null : task.due,
+                })),
+              });
+              if (selectedTarget) {
+                await updateTarget(selectedTarget.id, { status: "진행 중" });
+              }
+            } catch {
+              showNotice("저장에 실패했습니다. 이전 상태는 유지됩니다. 다시 시도해 주세요.");
+              return;
+            }
             setTargetItems((items) =>
               items.map((target) =>
                 target.id === selectedTarget?.id
@@ -2114,23 +2211,53 @@ function RelatedInfoAccordion() {
 
 function SampleDelayDrawer({
   alarm,
+  stages: persistedStages,
   onClose,
   onCloseAlarm,
   onMonitor,
   onAction,
 }: {
   alarm: Alarm;
+  stages: SampleDelayStage[] | null;
   onClose: () => void;
   onCloseAlarm: () => void;
   onMonitor: () => void;
   onAction: () => void;
 }) {
-  const stages = [
+  const fallbackSummary = { elapsedMinutes: 68, allowedMinutes: 30, overageMinutes: 38 };
+  const sampleDelaySummary = persistedStages?.length
+    ? (() => {
+        const latestStage = [...persistedStages]
+          .reverse()
+          .find((stage) => Number.isFinite(stage.elapsedMinutes) && Number.isFinite(stage.allowedMinutes));
+        if (!latestStage) return fallbackSummary;
+        const elapsedMinutes = Math.max(0, Number(latestStage.elapsedMinutes));
+        const allowedMinutes = Math.max(0, Number(latestStage.allowedMinutes));
+        return {
+          elapsedMinutes,
+          allowedMinutes,
+          overageMinutes: Math.max(0, elapsedMinutes - allowedMinutes),
+        };
+      })()
+    : fallbackSummary;
+  const stages = persistedStages?.length
+    ? persistedStages.map((stage) => {
+        const eventAt = new Date(stage.eventAt);
+        const elapsedMinutes = Number.isFinite(stage.elapsedMinutes) ? Math.max(0, Number(stage.elapsedMinutes)) : null;
+        const allowedMinutes = Number.isFinite(stage.allowedMinutes) ? Math.max(0, Number(stage.allowedMinutes)) : null;
+        return {
+          name: stage.stageName || "단계 정보 없음",
+          time: Number.isNaN(eventAt.getTime()) ? "-" : eventAt.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" }),
+          elapsed: elapsedMinutes === null ? "-" : `${elapsedMinutes}분`,
+          delay: stage.isDelayed === true || (elapsedMinutes !== null && allowedMinutes !== null && elapsedMinutes > allowedMinutes),
+        };
+      })
+    : [
     { name: "샘플 의뢰", time: "10:00", elapsed: "0분" },
     { name: "시험 접수", time: "10:12", elapsed: "12분" },
     { name: "시험 분석 완료", time: "10:38", elapsed: "38분" },
     { name: "판정 지연", time: "11:08", elapsed: "68분", delay: true },
-  ];
+    ];
   return (
     <div className="overlay">
       <aside className="drawer">
@@ -2162,11 +2289,11 @@ function SampleDelayDrawer({
             </div>
             <div className="sample-delay-summary">
               <b>경과 시간</b>
-              <span>68분</span>
+              <span>{sampleDelaySummary.elapsedMinutes}분</span>
               <b>허용 기준</b>
-              <span>30분</span>
+              <span>{sampleDelaySummary.allowedMinutes}분</span>
               <b>초과 시간</b>
-              <span>38분</span>
+              <span>{sampleDelaySummary.overageMinutes}분</span>
             </div>
             <ul className="sample-delay-durations">
               {stages.map((stage) => (

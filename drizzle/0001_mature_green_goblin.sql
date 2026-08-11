@@ -1,0 +1,3 @@
+ALTER TABLE "action_plans" ADD COLUMN "target_id" uuid;--> statement-breakpoint
+ALTER TABLE "action_plans" ADD CONSTRAINT "action_plans_target_id_targets_id_fk" FOREIGN KEY ("target_id") REFERENCES "public"."targets"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "sample_delay_stages" ADD CONSTRAINT "sample_delay_stages_stage_name_check" CHECK ("sample_delay_stages"."stage_name" in ('샘플 의뢰', '시험 접수', '시험 분석 완료', '판정 지연'));

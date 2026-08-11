@@ -99,7 +99,23 @@ test("keeps the compact desktop donut and overdue rows inside their equal-height
   assert.match(desktop, /\.distribution-layout \.donut\{width:114px;height:114px;margin:0 auto\}/);
   assert.match(desktop, /\.distribution\{padding:0 10px 0\}/);
   assert.match(desktop, /\.distribution p\{padding:3px 7px;margin:2px 0\}/);
-  assert.match(desktop, /\.overdue-row\{margin:4px 8px;padding:5px;gap:2px\}/);
+  assert.match(desktop, /\.overdue-row\{margin:3px 7px;padding:4px;gap:1px;font-size:12px\}/);
+});
+
+test("fits all overdue targets and the paginated target list in a desktop viewport", async () => {
+  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+
+  assert.match(page, /L1 불량률 감소/);
+  assert.match(page, /자동 샘플링 도입/);
+  assert.match(page, /3분기 공정 심사 준수/);
+  assert.doesNotMatch(page, /const pageSize = 3/);
+  assert.match(page, /window\.innerHeight/);
+  assert.match(page, /addEventListener\("resize"/);
+  assert.match(page, /setPage\(\(currentPage\) => Math\.min\(currentPage, totalPages\)\)/);
+  assert.match(css, /@media\(min-width:1201px\)\{[\s\S]*?\.overdue\{[^}]*min-height:0[^}]*\}[\s\S]*?\.overdue-row\{[^}]*font-size:12px[^}]*\}/);
+  assert.match(css, /@media\(min-width:1201px\)\{[\s\S]*?\.target-list\{[^}]*height:calc\(100vh - 50px\)[^}]*overflow:hidden[^}]*\}/);
+  assert.match(css, /@media\(max-width:1200px\)\{[\s\S]*?\.target-list\{[^}]*height:auto[^}]*overflow:visible[^}]*\}/);
 });
 
 test("uses a right-side target distribution legend", async () => {

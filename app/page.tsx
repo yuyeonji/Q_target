@@ -1797,11 +1797,27 @@ function TargetList({
   onExport: () => void;
 }) {
   const [page, setPage] = useState(1);
-  const pageSize = 3;
-  const pageRows = targets.slice((page - 1) * pageSize, page * pageSize);
+  const getPageSize = () =>
+    typeof window === "undefined"
+      ? 3
+      : Math.max(3, Math.floor((window.innerHeight - 390) / 46));
+  const [pageSize, setPageSize] = useState(getPageSize);
   const totalPages = Math.max(1, Math.ceil(targets.length / pageSize));
+
+  useEffect(() => {
+    const updatePageSize = () => setPageSize(getPageSize());
+    updatePageSize();
+    window.addEventListener("resize", updatePageSize);
+    return () => window.removeEventListener("resize", updatePageSize);
+  }, []);
+
+  useEffect(() => {
+    setPage((currentPage) => Math.min(currentPage, totalPages));
+  }, [totalPages]);
+
+  const pageRows = targets.slice((page - 1) * pageSize, page * pageSize);
   return (
-    <>
+    <div className="target-list">
       <div className="page-head target-title">
         <div>
           <h2>관리대상 목록</h2>
@@ -1926,7 +1942,7 @@ function TargetList({
           </span>
         </div>
       </article>
-    </>
+    </div>
   );
 }
 

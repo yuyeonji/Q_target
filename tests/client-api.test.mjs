@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFile } from "node:fs/promises";
 
 const client = await import(`../lib/client-api.ts?test=${Date.now()}`);
 
@@ -51,4 +52,19 @@ test("helpers return safe errors without server details", async () => {
       return true;
     });
   });
+});
+
+test("Sample Delay detail uses an encoded alarm path and preserves the API stage order", async () => {
+  const stages = [
+    { stageName: "샘플 의뢰", eventAt: "2023-10-12T08:00:00Z", elapsedMinutes: 0, allowedMinutes: 60, isDelayed: false },
+    { stageName: "판정 지연", eventAt: "2023-10-12T12:20:00Z", elapsedMinutes: 100, allowedMinutes: 60, isDelayed: true },
+  ];
+  await withFetch(new Response(JSON.stringify({ alarm: { id: "AL / 1" }, sampleDelayStages: stages }), { status: 200 }), async (calls) => {
+    const detail = await client.getAlarmDetail("AL / 1");
+    assert.equal(calls[0][0], "/api/alarms/AL%20%2F%201");
+    assert.deepEqual(detail.sampleDelayStages.map((stage) => stage.stageName), ["샘플 의뢰", "판정 지연"]);
+  });
+
+  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  assert.match(page, /const sampleDelaySummary = persistedStages\?\.length/);
 });

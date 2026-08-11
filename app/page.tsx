@@ -2214,14 +2214,34 @@ function SampleDelayDrawer({
   onMonitor: () => void;
   onAction: () => void;
 }) {
+  const fallbackSummary = { elapsedMinutes: 68, allowedMinutes: 30, overageMinutes: 38 };
+  const sampleDelaySummary = persistedStages?.length
+    ? (() => {
+        const latestStage = [...persistedStages]
+          .reverse()
+          .find((stage) => Number.isFinite(stage.elapsedMinutes) && Number.isFinite(stage.allowedMinutes));
+        if (!latestStage) return fallbackSummary;
+        const elapsedMinutes = Math.max(0, Number(latestStage.elapsedMinutes));
+        const allowedMinutes = Math.max(0, Number(latestStage.allowedMinutes));
+        return {
+          elapsedMinutes,
+          allowedMinutes,
+          overageMinutes: Math.max(0, elapsedMinutes - allowedMinutes),
+        };
+      })()
+    : fallbackSummary;
   const stages = persistedStages?.length
-    ? persistedStages.map((stage) => ({
-        name: stage.stageName,
-        time: new Date(stage.eventAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" }),
-        elapsed: `${stage.elapsedMinutes}분`,
-        delay: stage.isDelayed,
-        allowedMinutes: stage.allowedMinutes,
-      }))
+    ? persistedStages.map((stage) => {
+        const eventAt = new Date(stage.eventAt);
+        const elapsedMinutes = Number.isFinite(stage.elapsedMinutes) ? Math.max(0, Number(stage.elapsedMinutes)) : null;
+        const allowedMinutes = Number.isFinite(stage.allowedMinutes) ? Math.max(0, Number(stage.allowedMinutes)) : null;
+        return {
+          name: stage.stageName || "단계 정보 없음",
+          time: Number.isNaN(eventAt.getTime()) ? "-" : eventAt.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" }),
+          elapsed: elapsedMinutes === null ? "-" : `${elapsedMinutes}분`,
+          delay: stage.isDelayed === true || (elapsedMinutes !== null && allowedMinutes !== null && elapsedMinutes > allowedMinutes),
+        };
+      })
     : [
     { name: "샘플 의뢰", time: "10:00", elapsed: "0분" },
     { name: "시험 접수", time: "10:12", elapsed: "12분" },
@@ -2259,11 +2279,11 @@ function SampleDelayDrawer({
             </div>
             <div className="sample-delay-summary">
               <b>경과 시간</b>
-              <span>68분</span>
+              <span>{sampleDelaySummary.elapsedMinutes}분</span>
               <b>허용 기준</b>
-              <span>30분</span>
+              <span>{sampleDelaySummary.allowedMinutes}분</span>
               <b>초과 시간</b>
-              <span>38분</span>
+              <span>{sampleDelaySummary.overageMinutes}분</span>
             </div>
             <ul className="sample-delay-durations">
               {stages.map((stage) => (

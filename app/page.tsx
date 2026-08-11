@@ -253,7 +253,6 @@ export default function Home() {
   const [alarm, setAlarm] = useState<Alarm | null>(null);
   const [actionPlan, setActionPlan] = useState(false);
   const [newCase, setNewCase] = useState(false);
-  const [taskTab, setTaskTab] = useState("최근 유사 알람");
   const [masterTab, setMasterTab] = useState("알람 규칙");
   const [notice, setNotice] = useState("");
   const [tasks, setTasks] = useState<Task[]>([
@@ -2091,17 +2090,6 @@ function AlarmDrawer({
               </div>
             )}
           </section>
-          <div className="drawer-tabs">
-            {tabs.map((x) => (
-              <button
-                key={x}
-                className={tab === x ? "selected" : ""}
-                onClick={() => setTab?.(x)}
-              >
-                {x}
-              </button>
-            ))}
-          </div>
           <RelatedInfoAccordion />
         </div>
         <div className="drawer-footer">
@@ -2117,24 +2105,124 @@ function AlarmDrawer({
 }
 
 const relatedInfo = [
-  { label: "최근 유사 알람", content: "최근 30일 내 같은 설비에서 3건의 유사 알람이 발생했습니다." },
+  {
+    label: "최근 유사 알람",
+    content: "최근 30일 내 같은 설비에서 3건의 유사 알람이 발생했습니다.",
+  },
   { label: "과거 관리대상 내역", content: "TRG-8841 · 2023-09-18 · 조치 완료" },
-  { label: "과거 조치 및 효과", content: "베어링 교체 후 CPK가 1.42까지 회복되었습니다." },
+  {
+    label: "과거 조치 및 효과",
+    content: "베어링 교체 후 CPK가 1.42까지 회복되었습니다.",
+  },
   { label: "첨부파일", content: "측정 데이터.csv · 42KB" },
 ];
 
 function RelatedInfoAccordion() {
   const [open, setOpen] = useState(relatedInfo[0].label);
-  return <section className="related-info"><h3>연관 정보</h3>{relatedInfo.map(({ label, content }, index) => {
-    const panelId = `related-info-panel-${index}`;
-    const expanded = open === label;
-    return <div className="related-info-item" key={label}><button className="related-info-control" aria-expanded={open} aria-controls={panelId} onClick={() => setOpen(expanded ? "" : label)}>{label}</button>{expanded && <div className="related-info-panel" id={panelId}>{content}</div>}</div>;
-  })}</section>;
+  return (
+    <section className="related-info">
+      <h3>연관 정보</h3>
+      {relatedInfo.map(({ label, content }, index) => {
+        const panelId = `related-info-panel-${index}`;
+        const expanded = open === label;
+        return (
+          <div className="related-info-item" key={label}>
+            <button
+              className="related-info-control"
+              aria-expanded={expanded}
+              aria-controls={panelId}
+              onClick={() => setOpen(expanded ? "" : label)}
+            >
+              {label}
+            </button>
+            {expanded && (
+              <div className="related-info-panel" id={panelId}>
+                {content}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </section>
+  );
 }
 
-function SampleDelayDrawer({ alarm, onClose, onCloseAlarm, onMonitor, onAction }: { alarm: Alarm; onClose: () => void; onCloseAlarm: () => void; onMonitor: () => void; onAction: () => void }) {
-  const stages = [{ name: "샘플 채취", time: "10:00", elapsed: "0분" }, { name: "시험 접수", time: "10:12", elapsed: "12분" }, { name: "시험 분석 완료", time: "10:38", elapsed: "38분" }, { name: "판정 지연", time: "11:08", elapsed: "68분", delay: true }];
-  return <div className="overlay"><aside className="drawer"><div className="drawer-body"><button aria-label="상세 닫기" className="close" onClick={onClose}>×</button><span className="badge">SAMPLE DELAY ID: {alarm.id}</span><h2>{alarm.item}</h2><p className="red-text">판정 지연: 허용 기준을 38분 초과했습니다.</p><section><h3>샘플 지연 워크플로</h3><div className="sample-delay-workflow">{stages.map((stage) => <article className={stage.delay ? "sample-delay-stage delay" : "sample-delay-stage"} key={stage.name}><b>{stage.name}</b><span>시간 {stage.time}</span><span>경과 {stage.elapsed}</span>{stage.delay && <strong>지연 상태</strong>}</article>)}</div><div className="sample-delay-summary"><b>결과 시간</b><span>11:08</span><b>허용 기준</b><span>30분</span><b>초과 시간</b><span>38분</span></div><ul className="sample-delay-durations">{stages.map((stage) => <li key={stage.name}>{stage.name}: {stage.elapsed}</li>)}</ul></section><RelatedInfoAccordion /></div><div className="drawer-footer"><button onClick={onCloseAlarm}>조치 불필요 종결</button><button onClick={onMonitor}>모니터링 유지</button><button className="black" onClick={onAction}>관리대상 등록</button></div></aside></div>;
+function SampleDelayDrawer({
+  alarm,
+  onClose,
+  onCloseAlarm,
+  onMonitor,
+  onAction,
+}: {
+  alarm: Alarm;
+  onClose: () => void;
+  onCloseAlarm: () => void;
+  onMonitor: () => void;
+  onAction: () => void;
+}) {
+  const stages = [
+    { name: "샘플 의뢰", time: "10:00", elapsed: "0분" },
+    { name: "시험 접수", time: "10:12", elapsed: "12분" },
+    { name: "시험 분석 완료", time: "10:38", elapsed: "38분" },
+    { name: "판정 지연", time: "11:08", elapsed: "68분", delay: true },
+  ];
+  return (
+    <div className="overlay">
+      <aside className="drawer">
+        <div className="drawer-body">
+          <button aria-label="상세 닫기" className="close" onClick={onClose}>
+            ×
+          </button>
+          <span className="badge">SAMPLE DELAY ID: {alarm.id}</span>
+          <h2>{alarm.item}</h2>
+          <p className="red-text">판정 지연: 허용 기준을 38분 초과했습니다.</p>
+          <section>
+            <h3>샘플 지연 워크플로</h3>
+            <div className="sample-delay-workflow">
+              {stages.map((stage) => (
+                <article
+                  className={
+                    stage.delay
+                      ? "sample-delay-stage delay"
+                      : "sample-delay-stage"
+                  }
+                  key={stage.name}
+                >
+                  <b>{stage.name}</b>
+                  <span>시간 {stage.time}</span>
+                  <span>경과 {stage.elapsed}</span>
+                  {stage.delay && <strong>지연 상태</strong>}
+                </article>
+              ))}
+            </div>
+            <div className="sample-delay-summary">
+              <b>경과 시간</b>
+              <span>11:08</span>
+              <b>허용 기준</b>
+              <span>30분</span>
+              <b>초과 시간</b>
+              <span>38분</span>
+            </div>
+            <ul className="sample-delay-durations">
+              {stages.map((stage) => (
+                <li key={stage.name}>
+                  {stage.name}: {stage.elapsed}
+                </li>
+              ))}
+            </ul>
+          </section>
+          <RelatedInfoAccordion />
+        </div>
+        <div className="drawer-footer">
+          <button onClick={onCloseAlarm}>조치 불필요 종결</button>
+          <button onClick={onMonitor}>모니터링 유지</button>
+          <button className="black" onClick={onAction}>
+            관리대상 등록
+          </button>
+        </div>
+      </aside>
+    </div>
+  );
 }
 
 function NewCase({

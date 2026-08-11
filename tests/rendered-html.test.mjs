@@ -171,13 +171,13 @@ test("uses an accessible related-information accordion and sample-delay workflow
   const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
 
   assert.match(page, /function RelatedInfoAccordion/);
-  assert.match(page, /aria-expanded=\{open\}/);
+  assert.match(page, /aria-expanded=\{expanded\}/);
   assert.match(page, /aria-controls=\{panelId\}/);
-  assert.match(css, /\.drawer-tabs\{display:none!important\}/);
+  assert.doesNotMatch(page, /drawer-tabs/);
   assert.match(page, /alarm\.type === "Sample Delay"\s*\?\s*\(?\s*<SampleDelayDrawer/);
   assert.match(page, /function SampleDelayDrawer/);
-  assert.match(page, /샘플 채취[\s\S]*시험 접수[\s\S]*시험 분석 완료[\s\S]*판정 지연/);
-  assert.match(page, /결과 시간/);
+  assert.match(page, /샘플 의뢰[\s\S]*시험 접수[\s\S]*시험 분석 완료[\s\S]*판정 지연/);
+  assert.match(page, /경과 시간/);
   assert.match(page, /허용 기준/);
   assert.match(page, /초과 시간/);
   assert.match(css, /\.related-info-control/);

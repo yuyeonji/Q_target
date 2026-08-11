@@ -1,6 +1,7 @@
 export const sampleDelayStageNames = ["샘플 의뢰", "시험 접수", "시험 분석 완료", "판정 지연"] as const;
 
 const sampleDelayAlarmId = "99198000-0000-4000-8000-000000000001";
+const sampleDelayActionPlanId = "99198000-0000-4000-8000-000000000003";
 
 export const developmentSeed = {
   alarms: [
@@ -31,6 +32,32 @@ export const developmentSeed = {
       priority: "높음",
       dueDate: new Date("2023-11-20T00:00:00Z"),
       sourceAlarmId: sampleDelayAlarmId,
+    },
+  ],
+  actionPlans: [
+    {
+      id: sampleDelayActionPlanId,
+      alarmId: sampleDelayAlarmId,
+      rootCause: "시험 접수와 판정 단계의 인수인계 지연",
+      immediateAction: "담당자에게 지연 알림 및 우선 판정 요청",
+      preventiveAction: "단계별 SLA 알림을 설정",
+      status: "진행중",
+    },
+  ],
+  actionTasks: [
+    {
+      id: "99198000-0000-4000-8000-000000000004",
+      actionPlanId: sampleDelayActionPlanId,
+      description: "시험 접수 지연 원인 확인",
+      owner: "박실비",
+      dueDate: new Date("2023-10-13T00:00:00Z"),
+    },
+    {
+      id: "99198000-0000-4000-8000-000000000005",
+      actionPlanId: sampleDelayActionPlanId,
+      description: "판정 단계 SLA 설정",
+      owner: "이점검",
+      dueDate: new Date("2023-10-16T00:00:00Z"),
     },
   ],
 };

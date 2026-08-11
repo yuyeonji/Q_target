@@ -64,6 +64,12 @@ test("records the generated migration as PostgreSQL metadata", async () => {
   const journal = JSON.parse(await readFile(journalUrl, "utf8"));
 
   assert.equal(journal.dialect, "postgresql");
+  for (let index = 1; index < journal.entries.length; index += 1) {
+    assert.ok(
+      journal.entries[index].when > journal.entries[index - 1].when,
+      `${journal.entries[index].tag} must have a later timestamp than ${journal.entries[index - 1].tag}`,
+    );
+  }
 });
 
 test("backfills display codes before enforcing their unique non-null constraints", async () => {

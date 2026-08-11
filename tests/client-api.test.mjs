@@ -76,6 +76,24 @@ test("mutation helpers use JSON API contracts", async () => {
   });
 });
 
+test("action-plan list helper restores persisted plans and tasks for one encoded relation", async () => {
+  const actionPlans = [{
+    id: "99198000-0000-4000-8000-000000000003",
+    targetId: "99198000-0000-4000-8000-000000000002",
+    rootCause: "인수인계 지연",
+    tasks: [{ id: "99198000-0000-4000-8000-000000000004", description: "원인 확인" }],
+  }];
+  await withFetch(new Response(JSON.stringify({ actionPlans }), { status: 200 }), async (calls) => {
+    assert.equal(typeof client.listActionPlans, "function");
+    assert.deepEqual(
+      await client.listActionPlans({ targetId: "99198000-0000-4000-8000-000000000002" }),
+      actionPlans,
+    );
+    assert.equal(calls[0][0], "/api/action-plans?targetId=99198000-0000-4000-8000-000000000002");
+    assert.equal(calls[0][1]?.method, "GET");
+  });
+});
+
 test("createTarget and updateAlarm send JSON to collection and encoded detail endpoints", async () => {
   await withFetch(new Response(JSON.stringify({ target: { id: "T-2" } }), { status: 201 }), async (calls) => {
     await client.createTarget({ name: "신규 항목", status: "대기", owner: "담당자 미지정", priority: "중간" });

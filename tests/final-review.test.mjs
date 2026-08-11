@@ -4,10 +4,14 @@ import { readFile } from "node:fs/promises";
 
 const handlers = await import("../lib/route-handlers.mjs");
 const seed = await import(`../lib/seed.ts?final-review=${Date.now()}`);
+const targetId = "99198000-0000-4000-8000-000000000002";
 
 test("action-plan creation requires an alarm or target context and preserves a selected target", async () => {
   const saved = [];
   const repository = {
+    async findTarget(id) {
+      return id === targetId ? { id } : null;
+    },
     async createActionPlanWithAudit(plan) {
       saved.push(plan);
       return { id: "plan-1" };
@@ -23,10 +27,10 @@ test("action-plan creation requires an alarm or target context and preserves a s
 
   const created = await route.POST(new Request("http://app.local/api/action-plans", {
     method: "POST",
-    body: JSON.stringify({ status: "진행 중", targetId: "target-1" }),
+    body: JSON.stringify({ status: "진행 중", targetId }),
   }));
   assert.equal(created.status, 201);
-  assert.equal(saved[0].targetId, "target-1");
+  assert.equal(saved[0].targetId, targetId);
 });
 
 test("Sample Delay stages accept only the four approved stage names", () => {

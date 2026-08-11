@@ -7,3 +7,7 @@ import { createActionPlanRouteHandlers } from "@/lib/route-handlers.mjs";
 export async function POST(request: Request) {
   return createActionPlanRouteHandlers(createQualityRepository(getWorkerDb(), schema)).POST(request);
 }
+
+export async function GET(request: Request) {
+  return createActionPlanRouteHandlers(createQualityRepository(getWorkerDb(), schema)).GET(request);
+}

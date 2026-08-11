@@ -72,8 +72,33 @@ export type ActionPlanInput = {
   immediateAction?: string | null;
   preventiveAction?: string | null;
   status: string;
+  targetStatus?: string | null;
   tasks: Array<{ description: string; owner: string; dueDate?: string | null }>;
 };
+
+export type PersistedActionTask = {
+  id: string;
+  actionPlanId: string;
+  description: string;
+  owner: string;
+  dueDate?: string | null;
+  completedAt?: string | null;
+};
+
+export type PersistedActionPlan = {
+  id: string;
+  alarmId?: string | null;
+  targetId?: string | null;
+  rootCause?: string | null;
+  immediateAction?: string | null;
+  preventiveAction?: string | null;
+  status: string;
+  tasks: PersistedActionTask[];
+};
+
+export type ActionPlanRelation =
+  | { alarmId: string }
+  | { targetId: string };
 
 const safeError = "데이터를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.";
 
@@ -110,6 +135,17 @@ export async function getAlarmDetail(id: string) {
 export async function listTargets() {
   const response = await request<{ targets: PersistedTarget[] }>("/api/targets", { method: "GET" });
   return response.targets;
+}
+
+export async function listActionPlans(relation: ActionPlanRelation) {
+  const [key, value] = "alarmId" in relation
+    ? ["alarmId", relation.alarmId]
+    : ["targetId", relation.targetId];
+  const response = await request<{ actionPlans: PersistedActionPlan[] }>(
+    `/api/action-plans?${key}=${encodeURIComponent(value)}`,
+    { method: "GET" },
+  );
+  return response.actionPlans;
 }
 
 export async function createTarget(input: CreateTargetInput) {

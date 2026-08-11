@@ -1,4 +1,4 @@
-import { asc, desc, eq, sql } from "drizzle-orm";
+import { asc, desc, eq, inArray, sql } from "drizzle-orm";
 
 export type NewTarget = {
   targetCode: string;
@@ -41,14 +41,21 @@ export type NewActionPlan = {
   immediateAction?: string | null;
   preventiveAction?: string | null;
   status: string;
+  targetStatus?: string | null;
   tasks?: Array<{ description: string; owner: string; dueDate?: Date | null }>;
 };
+
+export type ActionPlanRelation =
+  | { alarmId: string }
+  | { targetId: string };
 
 export interface QualityRepository {
   listAlarms(): Promise<unknown[]>;
   findAlarm(id: string): Promise<unknown | null>;
   listSampleDelayStages(alarmId: string): Promise<unknown[]>;
   listTargets(): Promise<unknown[]>;
+  findTarget(id: string): Promise<unknown | null>;
+  listActionPlans(relation: ActionPlanRelation): Promise<Array<Record<string, unknown> & { tasks: unknown[] }>>;
   listMasterRules(kind: string): Promise<unknown[]>;
   listMasterCodes(): Promise<unknown[]>;
   createTargetWithAudit(input: NewTarget, audit: NewAuditEvent): Promise<{ id: string }>;
@@ -83,6 +90,28 @@ export function createQualityRepository(database: unknown, tables: QualityTables
     async listTargets() {
       return db.select().from(tables.targets).orderBy(desc(tables.targets.createdAt));
     },
+    async findTarget(id) {
+      const [target] = await db.select().from(tables.targets).where(eq(tables.targets.id, id)).limit(1);
+      return target ?? null;
+    },
+    async listActionPlans(relation) {
+      const [relationColumn, relationId] = "alarmId" in relation
+        ? [tables.actionPlans.alarmId, relation.alarmId]
+        : [tables.actionPlans.targetId, relation.targetId];
+      const plans = await db.select()
+        .from(tables.actionPlans)
+        .where(eq(relationColumn, relationId))
+        .orderBy(desc(tables.actionPlans.createdAt));
+      if (!plans.length) return [];
+      const tasks = await db.select()
+        .from(tables.actionTasks)
+        .where(inArray(tables.actionTasks.actionPlanId, plans.map((plan: { id: string }) => plan.id)))
+        .orderBy(asc(tables.actionTasks.createdAt));
+      return plans.map((plan: { id: string }) => ({
+        ...plan,
+        tasks: tasks.filter((task: { actionPlanId: string }) => task.actionPlanId === plan.id),
+      }));
+    },
     async listMasterRules(kind) {
       return db.select().from(tables.masterRules).where(eq(tables.masterRules.kind, kind));
     },
@@ -107,11 +136,26 @@ export function createQualityRepository(database: unknown, tables: QualityTables
       return updated[0] ?? null;
     },
     async createActionPlanWithAudit(input, audit) {
-      const { tasks, ...plan } = input;
+      const { tasks, targetStatus, ...plan } = input;
       const id = crypto.randomUUID();
       const statements = [
+        ...(targetStatus && plan.targetId ? [
+          db.update(tables.targets)
+            .set({ status: targetStatus })
+            .where(eq(tables.targets.id, plan.targetId))
+            .returning({ id: tables.targets.id }),
+        ] : []),
         db.insert(tables.actionPlans).values({ ...plan, id }),
         ...(tasks?.length ? [db.insert(tables.actionTasks).values(tasks.map((task) => ({ ...task, id: crypto.randomUUID(), actionPlanId: id })))] : []),
+        ...(targetStatus && plan.targetId ? [
+          db.insert(tables.auditEvents).values({
+            id: crypto.randomUUID(),
+            eventType: "target.updated",
+            entityType: "target",
+            entityId: plan.targetId,
+            details: { status: targetStatus },
+          }),
+        ] : []),
         db.insert(tables.auditEvents).values({ ...audit, id: crypto.randomUUID(), entityId: id }),
       ];
       await db.batch(statements);

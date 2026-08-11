@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 const alarmId = "99198000-0000-4000-8000-000000000001";
+const targetId = "99198000-0000-4000-8000-000000000002";
+const actionPlanId = "99198000-0000-4000-8000-000000000003";
 const masterRuleId = "71111111-1111-4111-8111-111111111111";
 const masterCodeId = "72222222-2222-4222-8222-222222222222";
 const missingId = "79999999-9999-4999-8999-999999999999";
@@ -17,8 +19,10 @@ function createFakeRepository({ failAtomicMutation = false } = {}) {
   const savedRules = [];
   const savedCodes = [];
   let alarmUpdateCalls = 0;
+  let targetUpdateCalls = 0;
   let masterRuleUpdateCalls = 0;
   let masterCodeUpdateCalls = 0;
+  const actionPlanListCalls = [];
   const sampleDelayStages = [
     { stageName: "샘플 의뢰", eventAt: "2023-10-12T08:00:00.000Z" },
     { stageName: "시험 접수", eventAt: "2023-10-12T09:10:00.000Z" },
@@ -34,12 +38,19 @@ function createFakeRepository({ failAtomicMutation = false } = {}) {
     savedRules,
     savedCodes,
     get alarmUpdateCalls() { return alarmUpdateCalls; },
+    get targetUpdateCalls() { return targetUpdateCalls; },
     get masterRuleUpdateCalls() { return masterRuleUpdateCalls; },
     get masterCodeUpdateCalls() { return masterCodeUpdateCalls; },
+    actionPlanListCalls,
     async listAlarms() { return alarms; },
     async findAlarm(id) { return alarms.find((alarm) => alarm.id === id) ?? null; },
     async listSampleDelayStages() { return sampleDelayStages; },
     async listTargets() { return savedTargets; },
+    async findTarget(id) { return id === targetId ? { id } : savedTargets.find((target) => target.id === id) ?? null; },
+    async listActionPlans(relation) {
+      actionPlanListCalls.push(relation);
+      return savedPlans.filter((plan) => relation.alarmId ? plan.alarmId === relation.alarmId : plan.targetId === relation.targetId);
+    },
     async listMasterRules(kind) { return savedRules.filter((rule) => rule.kind === kind); },
     async listMasterCodes() { return savedCodes; },
     async createTargetWithAudit(target, auditEvent) {
@@ -50,6 +61,7 @@ function createFakeRepository({ failAtomicMutation = false } = {}) {
       return saved;
     },
     async updateTargetWithAudit(id, changes, auditEvent) {
+      targetUpdateCalls += 1;
       if (failAtomicMutation) throw new Error("storage unavailable");
       const target = { id, ...changes };
       savedTargets.push(target);
@@ -149,17 +161,58 @@ test("target and action-plan mutations save their audit events through atomic re
   assert.equal(created.status, 201);
   assert.match(repository.savedTargets[0].targetCode, /^TRG-[0-9A-F]{8}$/);
 
-  const updated = await createTargetDetailRouteHandlers(repository).PATCH(new Request("http://app.local/api/targets/target-1", {
+  const updated = await createTargetDetailRouteHandlers(repository).PATCH(new Request(`http://app.local/api/targets/${targetId}`, {
     method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ status: "진행중" }),
-  }), { params: Promise.resolve({ id: "target-1" }) });
+  }), { params: Promise.resolve({ id: targetId }) });
   assert.equal(updated.status, 200);
 
   const plan = await createActionPlanRouteHandlers(repository).POST(new Request("http://app.local/api/action-plans", {
     method: "POST", headers: { "content-type": "application/json" },
-    body: JSON.stringify({ status: "진행중", alarmId: "alarm-1", tasks: [{ description: "원인 확인", owner: "홍길동" }] }),
+    body: JSON.stringify({ status: "진행중", alarmId, tasks: [{ description: "원인 확인", owner: "홍길동" }] }),
   }));
   assert.equal(plan.status, 201);
   assert.deepEqual(repository.auditEvents.map((event) => event.eventType), ["target.created", "target.updated", "action-plan.created"]);
+});
+
+test("action-plan GET returns persisted plans with tasks for exactly one UUID relation", async () => {
+  const { createActionPlanRouteHandlers } = await loadHandlers();
+  const repository = createFakeRepository();
+  repository.savedPlans.push({
+    id: actionPlanId,
+    alarmId,
+    targetId,
+    rootCause: "인수인계 지연",
+    status: "진행 중",
+    tasks: [{ id: "99198000-0000-4000-8000-000000000004", description: "원인 확인", owner: "홍길동" }],
+  });
+  const route = createActionPlanRouteHandlers(repository);
+
+  const response = await route.GET(new Request(`http://app.local/api/action-plans?targetId=${targetId}`));
+  assert.equal(response.status, 200);
+  assert.deepEqual((await response.json()).actionPlans, repository.savedPlans);
+  assert.deepEqual(repository.actionPlanListCalls, [{ targetId }]);
+
+  for (const url of [
+    "http://app.local/api/action-plans",
+    `http://app.local/api/action-plans?alarmId=${alarmId}&targetId=${targetId}`,
+    "http://app.local/api/action-plans?alarmId=not-a-uuid",
+  ]) {
+    assert.equal((await route.GET(new Request(url))).status, 400);
+  }
+});
+
+test("action-plan POST forwards a target status into the same atomic repository mutation", async () => {
+  const { createActionPlanRouteHandlers } = await loadHandlers();
+  const repository = createFakeRepository();
+  const response = await createActionPlanRouteHandlers(repository).POST(new Request("http://app.local/api/action-plans", {
+    method: "POST",
+    body: JSON.stringify({ status: "진행 중", targetId, targetStatus: "진행 중", tasks: [] }),
+  }));
+
+  assert.equal(response.status, 201);
+  assert.equal(repository.savedPlans.length, 1);
+  assert.equal(repository.savedPlans[0].targetId, targetId);
+  assert.equal(repository.savedPlans[0].targetStatus, "진행 중");
 });
 
 test("a failed atomic mutation leaves no partial target, action-plan, or audit data", async () => {
@@ -170,7 +223,7 @@ test("a failed atomic mutation leaves no partial target, action-plan, or audit d
     method: "POST", body: JSON.stringify({ name: "새 관리대상", status: "대기중", owner: "홍길동", priority: "높음" }),
   }));
   const plan = await createActionPlanRouteHandlers(repository).POST(new Request("http://app.local/api/action-plans", {
-    method: "POST", body: JSON.stringify({ status: "진행중", alarmId: "alarm-1" }),
+    method: "POST", body: JSON.stringify({ status: "진행중", alarmId }),
   }));
 
   assert.equal(target.status, 500);
@@ -290,6 +343,7 @@ test("alarm and master handlers return generic errors when an atomic write fails
 test("detail PATCH handlers reject malformed UUID parameters before calling repository writes", async () => {
   const {
     createAlarmDetailRouteHandlers,
+    createTargetDetailRouteHandlers,
     createMasterRuleDetailRouteHandlers,
     createMasterCodeDetailRouteHandlers,
   } = await loadHandlers();
@@ -297,12 +351,38 @@ test("detail PATCH handlers reject malformed UUID parameters before calling repo
   const malformedId = "not-a-uuid";
   const responses = await Promise.all([
     createAlarmDetailRouteHandlers(repository).PATCH(new Request(`http://app.local/api/alarms/${malformedId}`, { method: "PATCH", body: JSON.stringify({ status: "종결" }) }), { params: Promise.resolve({ id: malformedId }) }),
+    createTargetDetailRouteHandlers(repository).PATCH(new Request(`http://app.local/api/targets/${malformedId}`, { method: "PATCH", body: JSON.stringify({ status: "진행 중" }) }), { params: Promise.resolve({ id: malformedId }) }),
     createMasterRuleDetailRouteHandlers(repository).PATCH(new Request(`http://app.local/api/master/rules/${malformedId}`, { method: "PATCH", body: JSON.stringify({ active: false }) }), { params: Promise.resolve({ id: malformedId }) }),
     createMasterCodeDetailRouteHandlers(repository).PATCH(new Request(`http://app.local/api/master/codes/${malformedId}`, { method: "PATCH", body: JSON.stringify({ active: false }) }), { params: Promise.resolve({ id: malformedId }) }),
   ]);
 
   for (const response of responses) assert.equal(response.status, 400);
-  assert.deepEqual([repository.alarmUpdateCalls, repository.masterRuleUpdateCalls, repository.masterCodeUpdateCalls], [0, 0, 0]);
+  assert.deepEqual([repository.alarmUpdateCalls, repository.targetUpdateCalls, repository.masterRuleUpdateCalls, repository.masterCodeUpdateCalls], [0, 0, 0, 0]);
+});
+
+test("write handlers reject invalid UUID relations and unsupported rule kinds before repository writes", async () => {
+  const { createTargetRouteHandlers, createActionPlanRouteHandlers, createMasterRuleRouteHandlers } = await loadHandlers();
+  const repository = createFakeRepository();
+  const responses = await Promise.all([
+    createTargetRouteHandlers(repository).POST(new Request("http://app.local/api/targets", {
+      method: "POST",
+      body: JSON.stringify({ name: "관리대상", status: "대기", owner: "홍길동", priority: "높음", sourceAlarmId: "AL-99198" }),
+    })),
+    createActionPlanRouteHandlers(repository).POST(new Request("http://app.local/api/action-plans", {
+      method: "POST",
+      body: JSON.stringify({ status: "진행 중", alarmId: "AL-99198" }),
+    })),
+    createMasterRuleRouteHandlers(repository).POST(new Request("http://app.local/api/master/rules", {
+      method: "POST",
+      body: JSON.stringify({ ruleCode: "BAD-001", kind: "unsupported", name: "잘못된 규칙", scope: "전체", threshold: "1회" }),
+    })),
+    createMasterRuleRouteHandlers(repository).GET(new Request("http://app.local/api/master/rules?kind=unsupported")),
+  ]);
+
+  assert.deepEqual(responses.map((response) => response.status), [400, 400, 400, 400]);
+  assert.deepEqual(repository.savedTargets, []);
+  assert.deepEqual(repository.savedPlans, []);
+  assert.deepEqual(repository.savedRules, []);
 });
 
 test("development seed includes current-demo action plans and action tasks", async () => {
@@ -412,10 +492,42 @@ test("repository executes awaited Neon HTTP batches for target and action-plan m
   assert.equal(batchCalls[2].length, 2);
 
   await repository.createActionPlanWithAudit(
-    { status: "진행중", alarmId: "alarm-1", tasks: [{ description: "원인 확인", owner: "홍길동" }] },
+    { status: "진행중", alarmId, targetId, targetStatus: "진행 중", tasks: [{ description: "원인 확인", owner: "홍길동" }] },
     { eventType: "action-plan.created", entityType: "action-plan" },
   );
-  assert.equal(batchCalls[3].length, 3);
+  assert.equal(batchCalls[3].length, 5);
+  assert.equal(batchCalls[3][0].kind, "update");
+  assert.equal(batchCalls[3][0].table, tables.targets);
+  assert.deepEqual(batchCalls[3][0].changes, { status: "진행 중" });
+});
+
+test("repository lists action plans with their tasks for the selected relation", async () => {
+  const { createQualityRepository } = await import("../lib/quality-repository.ts");
+  const plans = [
+    { id: actionPlanId, alarmId, targetId, status: "진행 중", createdAt: new Date("2026-08-11T01:00:00Z") },
+  ];
+  const tasks = [
+    { id: "99198000-0000-4000-8000-000000000004", actionPlanId, description: "원인 확인", owner: "홍길동", createdAt: new Date("2026-08-11T01:01:00Z") },
+  ];
+  const tables = await import("../db/schema.ts");
+  const fakeDb = {
+    select() {
+      return {
+        from(table) {
+          return {
+            where() {
+              return {
+                orderBy() { return table === tables.actionPlans ? plans : tasks; },
+              };
+            },
+          };
+        },
+      };
+    },
+  };
+  const repository = createQualityRepository(fakeDb, tables);
+
+  assert.deepEqual(await repository.listActionPlans({ targetId }), [{ ...plans[0], tasks }]);
 });
 
 test("repository persists master data and alarm updates in audited batches", async () => {

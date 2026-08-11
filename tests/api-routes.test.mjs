@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+const alarmId = "99198000-0000-4000-8000-000000000001";
+const masterRuleId = "71111111-1111-4111-8111-111111111111";
+const masterCodeId = "72222222-2222-4222-8222-222222222222";
+const missingId = "79999999-9999-4999-8999-999999999999";
+
 async function loadHandlers() {
   return import("../lib/route-handlers.mjs");
 }
@@ -9,22 +14,34 @@ function createFakeRepository({ failAtomicMutation = false } = {}) {
   const auditEvents = [];
   const savedTargets = [];
   const savedPlans = [];
+  const savedRules = [];
+  const savedCodes = [];
+  let alarmUpdateCalls = 0;
+  let masterRuleUpdateCalls = 0;
+  let masterCodeUpdateCalls = 0;
   const sampleDelayStages = [
     { stageName: "샘플 의뢰", eventAt: "2023-10-12T08:00:00.000Z" },
     { stageName: "시험 접수", eventAt: "2023-10-12T09:10:00.000Z" },
     { stageName: "시험 분석 완료", eventAt: "2023-10-12T10:40:00.000Z" },
     { stageName: "판정 지연", eventAt: "2023-10-12T12:20:00.000Z" },
   ];
-  const alarms = [{ id: "alarm-1", alarmCode: "AL-99198", item: "Bearing Housing A1", type: "Sample Delay" }];
+  const alarms = [{ id: alarmId, alarmCode: "AL-99198", item: "Bearing Housing A1", type: "Sample Delay" }];
 
   return {
     auditEvents,
     savedTargets,
     savedPlans,
+    savedRules,
+    savedCodes,
+    get alarmUpdateCalls() { return alarmUpdateCalls; },
+    get masterRuleUpdateCalls() { return masterRuleUpdateCalls; },
+    get masterCodeUpdateCalls() { return masterCodeUpdateCalls; },
     async listAlarms() { return alarms; },
     async findAlarm(id) { return alarms.find((alarm) => alarm.id === id) ?? null; },
     async listSampleDelayStages() { return sampleDelayStages; },
     async listTargets() { return savedTargets; },
+    async listMasterRules(kind) { return savedRules.filter((rule) => rule.kind === kind); },
+    async listMasterCodes() { return savedCodes; },
     async createTargetWithAudit(target, auditEvent) {
       if (failAtomicMutation) throw new Error("storage unavailable");
       const saved = { id: "target-1", ...target };
@@ -46,6 +63,47 @@ function createFakeRepository({ failAtomicMutation = false } = {}) {
       auditEvents.push(auditEvent);
       return saved;
     },
+    async updateAlarmWithAudit(id, changes, auditEvent) {
+      alarmUpdateCalls += 1;
+      if (failAtomicMutation) throw new Error("DATABASE_URL=postgresql://secret");
+      const alarm = alarms.find((item) => item.id === id);
+      if (!alarm) return null;
+      Object.assign(alarm, changes);
+      auditEvents.push(auditEvent);
+      return { id };
+    },
+    async createMasterRuleWithAudit(rule, auditEvent) {
+      if (failAtomicMutation) throw new Error("DATABASE_URL=postgresql://secret");
+      const saved = { id: masterRuleId, ...rule };
+      savedRules.push(saved);
+      auditEvents.push(auditEvent);
+      return { id: saved.id };
+    },
+    async updateMasterRuleWithAudit(id, changes, auditEvent) {
+      masterRuleUpdateCalls += 1;
+      if (failAtomicMutation) throw new Error("DATABASE_URL=postgresql://secret");
+      const rule = savedRules.find((item) => item.id === id);
+      if (!rule) return null;
+      Object.assign(rule, changes);
+      auditEvents.push(auditEvent);
+      return { id };
+    },
+    async createMasterCodeWithAudit(code, auditEvent) {
+      if (failAtomicMutation) throw new Error("DATABASE_URL=postgresql://secret");
+      const saved = { id: masterCodeId, ...code };
+      savedCodes.push(saved);
+      auditEvents.push(auditEvent);
+      return { id: saved.id };
+    },
+    async updateMasterCodeWithAudit(id, changes, auditEvent) {
+      masterCodeUpdateCalls += 1;
+      if (failAtomicMutation) throw new Error("DATABASE_URL=postgresql://secret");
+      const code = savedCodes.find((item) => item.id === id);
+      if (!code) return null;
+      Object.assign(code, changes);
+      auditEvents.push(auditEvent);
+      return { id };
+    },
   };
 }
 
@@ -54,11 +112,11 @@ test("alarm handlers return a list and Sample Delay stages in chronological orde
   const repository = createFakeRepository();
 
   const list = await createAlarmRouteHandlers(repository).GET();
-  assert.deepEqual((await list.json()).alarms, [{ id: "alarm-1", alarmCode: "AL-99198", item: "Bearing Housing A1", type: "Sample Delay" }]);
+  assert.deepEqual((await list.json()).alarms, [{ id: alarmId, alarmCode: "AL-99198", item: "Bearing Housing A1", type: "Sample Delay" }]);
 
   const detail = await createAlarmDetailRouteHandlers(repository).GET(
-    new Request("http://app.local/api/alarms/alarm-1"),
-    { params: Promise.resolve({ id: "alarm-1" }) },
+    new Request(`http://app.local/api/alarms/${alarmId}`),
+    { params: Promise.resolve({ id: alarmId }) },
   );
   const body = await detail.json();
   assert.equal(detail.status, 200);
@@ -120,6 +178,131 @@ test("a failed atomic mutation leaves no partial target, action-plan, or audit d
   assert.deepEqual(repository.savedTargets, []);
   assert.deepEqual(repository.savedPlans, []);
   assert.deepEqual(repository.auditEvents, []);
+});
+
+test("alarm and master handlers persist valid changes through audited repository operations", async () => {
+  const {
+    createAlarmDetailRouteHandlers,
+    createMasterRuleRouteHandlers,
+    createMasterRuleDetailRouteHandlers,
+    createMasterCodeRouteHandlers,
+    createMasterCodeDetailRouteHandlers,
+  } = await loadHandlers();
+  const repository = createFakeRepository();
+
+  const alarm = await createAlarmDetailRouteHandlers(repository).PATCH(
+    new Request(`http://app.local/api/alarms/${alarmId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ status: "종결", reviewer: "품질 검토팀" }),
+    }),
+    { params: Promise.resolve({ id: alarmId }) },
+  );
+  assert.equal(alarm.status, 200);
+  assert.deepEqual((await alarm.json()).alarm, { id: alarmId });
+
+  const rule = await createMasterRuleRouteHandlers(repository).POST(new Request("http://app.local/api/master/rules", {
+    method: "POST",
+    body: JSON.stringify({ ruleCode: "ALR-004", kind: "alarm", name: "신규 규칙", scope: "전체", threshold: "1회", active: true }),
+  }));
+  assert.equal(rule.status, 201);
+  assert.deepEqual(await (await createMasterRuleRouteHandlers(repository).GET(new Request("http://app.local/api/master/rules?kind=alarm"))).json(), {
+    rules: [{ id: masterRuleId, ruleCode: "ALR-004", kind: "alarm", name: "신규 규칙", scope: "전체", threshold: "1회", active: true }],
+  });
+
+  const updatedRule = await createMasterRuleDetailRouteHandlers(repository).PATCH(new Request(`http://app.local/api/master/rules/${masterRuleId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ active: false }),
+  }), { params: Promise.resolve({ id: masterRuleId }) });
+  assert.equal(updatedRule.status, 200);
+
+  const code = await createMasterCodeRouteHandlers(repository).POST(new Request("http://app.local/api/master/codes", {
+    method: "POST",
+    body: JSON.stringify({ code: "PRC-ASM", name: "조립", category: "공정 코드", active: true }),
+  }));
+  assert.equal(code.status, 201);
+  assert.deepEqual(await (await createMasterCodeRouteHandlers(repository).GET()).json(), {
+    codes: [{ id: masterCodeId, code: "PRC-ASM", name: "조립", category: "공정 코드", active: true }],
+  });
+
+  const updatedCode = await createMasterCodeDetailRouteHandlers(repository).PATCH(new Request(`http://app.local/api/master/codes/${masterCodeId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ category: "공정 분류", active: false }),
+  }), { params: Promise.resolve({ id: masterCodeId }) });
+  assert.equal(updatedCode.status, 200);
+  assert.deepEqual(repository.auditEvents.map((event) => event.eventType), [
+    "alarm.updated",
+    "master-rule.created",
+    "master-rule.updated",
+    "master-code.created",
+    "master-code.updated",
+  ]);
+});
+
+test("alarm and master handlers reject malformed writes and report missing rows safely", async () => {
+  const {
+    createAlarmDetailRouteHandlers,
+    createMasterRuleRouteHandlers,
+    createMasterRuleDetailRouteHandlers,
+    createMasterCodeRouteHandlers,
+    createMasterCodeDetailRouteHandlers,
+  } = await loadHandlers();
+  const repository = createFakeRepository();
+  const malformed = await Promise.all([
+    createAlarmDetailRouteHandlers(repository).PATCH(new Request("http://app.local/api/alarms/alarm-1", { method: "PATCH", body: "{}" }), { params: Promise.resolve({ id: "alarm-1" }) }),
+    createMasterRuleRouteHandlers(repository).POST(new Request("http://app.local/api/master/rules", { method: "POST", body: "{}" })),
+    createMasterRuleDetailRouteHandlers(repository).PATCH(new Request("http://app.local/api/master/rules/rule-1", { method: "PATCH", body: "{}" }), { params: Promise.resolve({ id: "rule-1" }) }),
+    createMasterCodeRouteHandlers(repository).POST(new Request("http://app.local/api/master/codes", { method: "POST", body: "{}" })),
+    createMasterCodeDetailRouteHandlers(repository).PATCH(new Request("http://app.local/api/master/codes/code-1", { method: "PATCH", body: "{}" }), { params: Promise.resolve({ id: "code-1" }) }),
+  ]);
+  for (const response of malformed) assert.equal(response.status, 400);
+
+  const missing = await Promise.all([
+    createAlarmDetailRouteHandlers(repository).PATCH(new Request(`http://app.local/api/alarms/${missingId}`, { method: "PATCH", body: JSON.stringify({ status: "종결" }) }), { params: Promise.resolve({ id: missingId }) }),
+    createMasterRuleDetailRouteHandlers(repository).PATCH(new Request(`http://app.local/api/master/rules/${missingId}`, { method: "PATCH", body: JSON.stringify({ active: false }) }), { params: Promise.resolve({ id: missingId }) }),
+    createMasterCodeDetailRouteHandlers(repository).PATCH(new Request(`http://app.local/api/master/codes/${missingId}`, { method: "PATCH", body: JSON.stringify({ active: false }) }), { params: Promise.resolve({ id: missingId }) }),
+  ]);
+  for (const response of missing) {
+    assert.equal(response.status, 404);
+    assert.doesNotMatch(await response.text(), /DATABASE_URL|postgresql:/i);
+  }
+});
+
+test("alarm and master handlers return generic errors when an atomic write fails", async () => {
+  const {
+    createAlarmDetailRouteHandlers,
+    createMasterRuleRouteHandlers,
+    createMasterCodeRouteHandlers,
+  } = await loadHandlers();
+  const repository = createFakeRepository({ failAtomicMutation: true });
+  const failed = await Promise.all([
+    createAlarmDetailRouteHandlers(repository).PATCH(new Request(`http://app.local/api/alarms/${alarmId}`, { method: "PATCH", body: JSON.stringify({ status: "종결" }) }), { params: Promise.resolve({ id: alarmId }) }),
+    createMasterRuleRouteHandlers(repository).POST(new Request("http://app.local/api/master/rules", { method: "POST", body: JSON.stringify({ ruleCode: "ALR-004", kind: "alarm", name: "신규 규칙", scope: "전체", threshold: "1회" }) })),
+    createMasterCodeRouteHandlers(repository).POST(new Request("http://app.local/api/master/codes", { method: "POST", body: JSON.stringify({ code: "PRC-ASM", name: "조립", category: "공정 코드" }) })),
+  ]);
+
+  for (const response of failed) {
+    assert.equal(response.status, 500);
+    assert.doesNotMatch(await response.text(), /DATABASE_URL|postgresql:/i);
+  }
+  assert.deepEqual(repository.auditEvents, []);
+});
+
+test("detail PATCH handlers reject malformed UUID parameters before calling repository writes", async () => {
+  const {
+    createAlarmDetailRouteHandlers,
+    createMasterRuleDetailRouteHandlers,
+    createMasterCodeDetailRouteHandlers,
+  } = await loadHandlers();
+  const repository = createFakeRepository();
+  const malformedId = "not-a-uuid";
+  const responses = await Promise.all([
+    createAlarmDetailRouteHandlers(repository).PATCH(new Request(`http://app.local/api/alarms/${malformedId}`, { method: "PATCH", body: JSON.stringify({ status: "종결" }) }), { params: Promise.resolve({ id: malformedId }) }),
+    createMasterRuleDetailRouteHandlers(repository).PATCH(new Request(`http://app.local/api/master/rules/${malformedId}`, { method: "PATCH", body: JSON.stringify({ active: false }) }), { params: Promise.resolve({ id: malformedId }) }),
+    createMasterCodeDetailRouteHandlers(repository).PATCH(new Request(`http://app.local/api/master/codes/${malformedId}`, { method: "PATCH", body: JSON.stringify({ active: false }) }), { params: Promise.resolve({ id: malformedId }) }),
+  ]);
+
+  for (const response of responses) assert.equal(response.status, 400);
+  assert.deepEqual([repository.alarmUpdateCalls, repository.masterRuleUpdateCalls, repository.masterCodeUpdateCalls], [0, 0, 0]);
 });
 
 test("development seed includes current-demo action plans and action tasks", async () => {

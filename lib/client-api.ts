@@ -1,5 +1,6 @@
 export type PersistedAlarm = {
   id: string;
+  alarmCode: string;
   occurredAt: string;
   item: string;
   type: string;
@@ -11,6 +12,7 @@ export type PersistedAlarm = {
 
 export type PersistedTarget = {
   id: string;
+  targetCode: string;
   name: string;
   status: string;
   owner: string;

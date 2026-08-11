@@ -15,6 +15,7 @@ type AnalysisPanel = "trend" | "distribution" | null;
 type AlarmStatus = "신규" | "검토중" | "심각" | "종결";
 type Alarm = {
   id: string;
+  code?: string;
   time: string;
   item: string;
   type: string;
@@ -32,6 +33,7 @@ type Task = {
 };
 type Target = {
   id: string;
+  code?: string;
   name: string;
   status: string;
   owner: string;
@@ -303,6 +305,7 @@ export default function Home() {
       ]);
       setAlarmItems(persistedAlarms.map((item) => ({
         id: item.id,
+        code: item.alarmCode,
         time: new Date(item.occurredAt).toLocaleString("sv-SE").replace("T", " "),
         item: item.item,
         type: item.type,
@@ -313,6 +316,7 @@ export default function Home() {
       })));
       setTargetItems(persistedTargets.map((item) => ({
         id: item.id,
+        code: item.targetCode,
         name: item.name,
         status: item.status,
         owner: item.owner,
@@ -350,7 +354,7 @@ export default function Home() {
     () =>
       alarmItems.filter(
         (item) =>
-          `${item.item} ${item.id} ${item.type}`
+          `${item.item} ${item.code ?? item.id} ${item.type}`
             .toLowerCase()
             .includes(search.toLowerCase()) &&
           (alarmFilter === "전체" || item.status === alarmFilter),
@@ -361,7 +365,7 @@ export default function Home() {
     () =>
       targetItems.filter(
         (item) =>
-          `${item.id} ${item.name} ${item.owner}`
+          `${item.code ?? item.id} ${item.name} ${item.owner}`
             .toLowerCase()
             .includes(search.toLowerCase()) &&
           (targetFilter === "전체" || item.status === targetFilter),
@@ -523,6 +527,7 @@ export default function Home() {
                 downloadCsv(
                   visibleAlarms.map(
                     ({
+                      code,
                       id,
                       time,
                       item,
@@ -532,7 +537,7 @@ export default function Home() {
                       status,
                       reviewer,
                     }) => ({
-                      id,
+                      id: code ?? id,
                       time,
                       item,
                       type,
@@ -558,7 +563,13 @@ export default function Home() {
                 setActionPlan(true);
               }}
               onExport={() =>
-                downloadCsv(visibleTargets, "q-target-targets.csv")
+                downloadCsv(
+                  visibleTargets.map(({ code, id, ...target }) => ({
+                    ...target,
+                    id: code ?? id,
+                  })),
+                  "q-target-targets.csv",
+                )
               }
             />
           )}
@@ -1855,7 +1866,7 @@ function AlarmList({
               <tr className="clickable" key={a.id} onClick={() => onOpen(a)}>
                 <td>{a.time}</td>
                 <td>{a.item}</td>
-                <td>{a.id}</td>
+                <td>{a.code ?? a.id}</td>
                 <td>{a.type}</td>
                 <td>{a.process}</td>
                 <td>{a.line}</td>
@@ -1981,7 +1992,7 @@ function TargetList({
                   key={r.id}
                   className={r.status === "심각" ? "critical-row" : ""}
                 >
-                  <td>{r.id}</td>
+                  <td>{r.code ?? r.id}</td>
                   <td>
                     <b>{r.name}</b>
                   </td>
@@ -2058,7 +2069,7 @@ function AlarmDrawer({
           <button aria-label="상세 닫기" className="close" onClick={onClose}>
             ×
           </button>
-          <span className="badge">NEW ALARM ID: {alarm.id}</span>
+          <span className="badge">NEW ALARM ID: {alarm.code ?? alarm.id}</span>
           <h2>{alarm.item}</h2>
           <p className="red-text">
             CPK 값이 1.33 임계값 미만으로 하락했습니다.
@@ -2067,7 +2078,7 @@ function AlarmDrawer({
             <h3>알람 기본 정보</h3>
             <div className="info-grid">
               <p>
-                알람 번호<strong>{alarm.id}</strong>
+                알람 번호<strong>{alarm.code ?? alarm.id}</strong>
               </p>
               <p>
                 발생 일시<strong>{alarm.time}</strong>
@@ -2265,7 +2276,7 @@ function SampleDelayDrawer({
           <button aria-label="상세 닫기" className="close" onClick={onClose}>
             ×
           </button>
-          <span className="badge">SAMPLE DELAY ID: {alarm.id}</span>
+          <span className="badge">SAMPLE DELAY ID: {alarm.code ?? alarm.id}</span>
           <h2>{alarm.item}</h2>
           <p className="red-text">판정 지연: 허용 기준을 38분 초과했습니다.</p>
           <section>

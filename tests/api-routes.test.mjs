@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { readFile } from "node:fs/promises";
 
 async function loadHandlers() {
   return import("../lib/route-handlers.mjs");
@@ -127,4 +128,10 @@ test("development seed includes current-demo action plans and action tasks", asy
   assert.equal(developmentSeed.actionPlans.length, 1);
   assert.equal(developmentSeed.actionTasks.length, 2);
   assert.ok(developmentSeed.actionTasks.every((task) => task.actionPlanId === developmentSeed.actionPlans[0].id));
+});
+
+test("production repository uses Neon HTTP batch operations instead of unsupported interactive transactions", async () => {
+  const source = await readFile(new URL("../lib/quality-repository.ts", import.meta.url), "utf8");
+  assert.match(source, /db\.batch\(/);
+  assert.doesNotMatch(source, /db\.transaction\(/);
 });

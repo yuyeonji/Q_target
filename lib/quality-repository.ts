@@ -1,4 +1,4 @@
-import { asc, desc, eq } from "drizzle-orm";
+import { asc, desc, eq, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import {
   actionPlans,
@@ -61,30 +61,32 @@ export function createQualityRepository(database = getDb()): QualityRepository {
       return db.select().from(targets).orderBy(desc(targets.createdAt));
     },
     async createTargetWithAudit(input, audit) {
-      return db.transaction(async (tx: any) => {
-        const [target] = await tx.insert(targets).values(input).returning({ id: targets.id });
-        await tx.insert(auditEvents).values({ ...audit, entityId: target.id });
-        return target;
-      });
+      const id = crypto.randomUUID();
+      await db.batch([
+        db.insert(targets).values({ ...input, id }),
+        db.insert(auditEvents).values({ ...audit, id: crypto.randomUUID(), entityId: id }),
+      ]);
+      return { id };
     },
     async updateTargetWithAudit(id, changes, audit) {
-      return db.transaction(async (tx: any) => {
-        const [target] = await tx.update(targets).set(changes).where(eq(targets.id, id)).returning({ id: targets.id });
-        if (!target) return null;
-        await tx.insert(auditEvents).values({ ...audit, entityId: target.id });
-        return target;
-      });
+      const [updated] = await db.batch([
+        db.update(targets).set(changes).where(eq(targets.id, id)).returning({ id: targets.id }),
+        db.execute(sql`insert into ${auditEvents} (id, event_type, entity_type, entity_id, details)
+          select ${crypto.randomUUID()}, ${audit.eventType}, ${audit.entityType}, ${id}, ${audit.details ?? null}
+          where exists (select 1 from ${targets} where ${eq(targets.id, id)})`),
+      ]);
+      return updated[0] ?? null;
     },
     async createActionPlanWithAudit(input, audit) {
-      return db.transaction(async (tx: any) => {
-        const { tasks, ...plan } = input;
-        const [createdPlan] = await tx.insert(actionPlans).values(plan).returning({ id: actionPlans.id });
-        if (tasks?.length) {
-          await tx.insert(actionTasks).values(tasks.map((task) => ({ ...task, actionPlanId: createdPlan.id })));
-        }
-        await tx.insert(auditEvents).values({ ...audit, entityId: createdPlan.id });
-        return createdPlan;
-      });
+      const { tasks, ...plan } = input;
+      const id = crypto.randomUUID();
+      const statements = [
+        db.insert(actionPlans).values({ ...plan, id }),
+        ...(tasks?.length ? [db.insert(actionTasks).values(tasks.map((task) => ({ ...task, id: crypto.randomUUID(), actionPlanId: id })))] : []),
+        db.insert(auditEvents).values({ ...audit, id: crypto.randomUUID(), entityId: id }),
+      ];
+      await db.batch(statements);
+      return { id };
     },
   };
 }

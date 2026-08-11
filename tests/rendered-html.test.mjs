@@ -220,6 +220,22 @@ test("splits master tabs into distinct editable rule and code management surface
   assert.match(page, /aria-label="임계값 수정"/);
   assert.match(page, />\s*활성\s*<\/button>[\s\S]*?>\s*비활성\s*<\/button>/);
   assert.doesNotMatch(page, /window\.prompt/);
-  assert.match(css, /\.rule-state-choice\.active[^}]*background:\s*#[0-9a-f]{6}[^}]*color:\s*#fff/i);
-  assert.match(css, /\.rule-state-choice\.inactive[^}]*background:\s*#[0-9a-f]{6}[^}]*color:\s*#fff/i);
+  assert.match(css, /\.rule-state-choice\.active\.selected[^}]*background:\s*#[0-9a-f]{6}[^}]*color:\s*#fff/i);
+  assert.match(css, /\.rule-state-choice\.inactive\.selected[^}]*background:\s*#[0-9a-f]{6}[^}]*color:\s*#fff/i);
+});
+
+test("uses Korean-first action-plan labels and clearly distinguished rule states", async () => {
+  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+
+  assert.match(page, /<h3>🟣 원인 분석<\/h3>/);
+  assert.match(page, /\n\s*현상\n\s*<textarea/);
+  assert.match(page, /\n\s*근본 원인\n\s*<textarea/);
+  assert.match(page, /<h3>▣ 조치 계획<\/h3>/);
+  assert.match(page, /aria-pressed=\{active\}/);
+  assert.match(page, /aria-pressed=\{!active\}/);
+  assert.match(css, /\.rule-state-choice\.active\.selected\{[^}]*background:\s*#16803b[^}]*color:\s*#fff[^}]*\}/);
+  assert.match(css, /\.rule-state-choice\.inactive\.selected\{[^}]*background:\s*#c52229[^}]*color:\s*#fff[^}]*\}/);
+  assert.match(css, /\.rule-state-choice\{[^}]*border:\s*2px solid #[0-9a-f]{6}[^}]*\}/i);
+  assert.match(css, /\.rule-state-choice:focus-visible\{[^}]*outline:\s*3px solid #[0-9a-f]{6}[^}]*\}/i);
 });

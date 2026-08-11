@@ -2304,10 +2304,10 @@ function ActionPlan({
             </div>
           </section>
           <section>
-            <h3>🟣 원인분석 (Cause Analysis)</h3>
+            <h3>🟣 원인 분석</h3>
             <div className="textareas">
               <label>
-                현상 (Phenomenon)
+                현상
                 <textarea
                   defaultValue={
                     "발생한 현상을 객관적인 사실 기반으로 상세히 기술하세요."
@@ -2315,7 +2315,7 @@ function ActionPlan({
                 />
               </label>
               <label>
-                근본 원인 (Root Cause)
+                근본 원인
                 <textarea
                   defaultValue={"5Why 분석을 통한 근본 원인을 기술하세요."}
                 />
@@ -2324,7 +2324,7 @@ function ActionPlan({
           </section>
           <section>
             <div className="section-head">
-              <h3>▣ 조치계획 (Action Plan)</h3>
+              <h3>▣ 조치 계획</h3>
               <button onClick={onAdd}>＋ 신규 과제 추가</button>
             </div>
             <ScrollTable label="조치계획 과제 목록">

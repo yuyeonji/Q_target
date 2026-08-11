@@ -48,12 +48,10 @@ test("includes complete demo control surfaces", async () => {
   const source = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   assert.match(source, /알림 센터/);
   assert.match(source, /표시 설정/);
-  assert.match(source, /첨부 파일 추가/);
   assert.match(source, /다음 페이지/);
   assert.match(source, /고객지원 센터/);
   assert.match(source, /시스템 로그/);
   assert.match(source, /q-target-rules.csv/);
-  assert.match(source, /demo-attachment/);
   assert.match(source, /compact-mode/);
   assert.match(source, /selectedTarget/);
 });
@@ -69,7 +67,7 @@ test("wires dashboard analysis controls and critical-alarm navigation", async ()
   assert.match(source, /onClick=\{onViewCriticalAlarms\}/);
   assert.match(criticalNavigation, /setView\("alarms"\);\s*setAlarmFilter\("심각"\)/);
   assert.doesNotMatch(criticalNavigation, /setAlarm\(/);
-  assert.match(source, /\{analysisPanel && <AnalysisPanel/);
+  assert.match(source, /\{analysisPanel\s*&&\s*\(?\s*<AnalysisPanel/);
   assert.match(source, /function AnalysisPanel/);
   assert.match(source, /기간별 카테고리 추이/);
   assert.match(source, /상태별 대상 분포/);
@@ -80,7 +78,7 @@ test("critical-alarm navigation resolves to a supported filter with visible hist
 
   assert.match(source, /type AlarmStatus = [^;]*"심각"/);
   assert.match(source, /const alarms: Alarm\[\] = \[[\s\S]*?status: "심각"/);
-  assert.match(source, /상태 필터 <select[^>]*>[\s\S]*?<option>심각<\/option>/);
+  assert.match(source, /상태 필터[\s\S]*?<select[^>]*>[\s\S]*?<option>\s*심각\s*<\/option>/);
 });
 
 test("fits the wide desktop dashboard without hiding card content", async () => {
@@ -101,7 +99,23 @@ test("keeps the compact desktop donut and overdue rows inside their equal-height
   assert.match(desktop, /\.distribution-layout \.donut\{width:114px;height:114px;margin:0 auto\}/);
   assert.match(desktop, /\.distribution\{padding:0 10px 0\}/);
   assert.match(desktop, /\.distribution p\{padding:3px 7px;margin:2px 0\}/);
-  assert.match(desktop, /\.overdue-row\{margin:4px 8px;padding:5px;gap:2px\}/);
+  assert.match(desktop, /\.overdue-row\{margin:3px 7px;padding:4px;gap:1px;font-size:12px\}/);
+});
+
+test("fits all overdue targets and the paginated target list in a desktop viewport", async () => {
+  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+
+  assert.match(page, /L1 불량률 감소/);
+  assert.match(page, /자동 샘플링 도입/);
+  assert.match(page, /3분기 공정 심사 준수/);
+  assert.doesNotMatch(page, /const pageSize = 3/);
+  assert.match(page, /window\.innerHeight/);
+  assert.match(page, /addEventListener\("resize"/);
+  assert.match(page, /setPage\(\(currentPage\) => Math\.min\(currentPage, totalPages\)\)/);
+  assert.match(css, /@media\(min-width:1201px\)\{[\s\S]*?\.overdue\{[^}]*min-height:0[^}]*\}[\s\S]*?\.overdue-row\{[^}]*font-size:12px[^}]*\}/);
+  assert.match(css, /@media\(min-width:1201px\)\{[\s\S]*?\.target-list\{[^}]*height:calc\(100vh - 50px\)[^}]*overflow:hidden[^}]*\}/);
+  assert.match(css, /@media\(max-width:1200px\)\{[\s\S]*?\.target-list\{[^}]*height:auto[^}]*overflow:visible[^}]*\}/);
 });
 
 test("uses a right-side target distribution legend", async () => {
@@ -132,8 +146,9 @@ test("makes narrow tables and charts horizontally reachable", async () => {
   const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
 
   assert.match(page, /function ScrollTable/);
-  assert.match(page, /className="table-scroll" role="region" aria-label=\{label\} tabIndex=\{0\}/);
-  assert.match(page, /className="chart-scroll" role="region" aria-label="카테고리별 알람 추세 차트" tabIndex=\{0\}/);
+  assert.match(page, /className="table-scroll"[\s\S]*?role="region"[\s\S]*?aria-label=\{label\}/);
+  assert.match(page, /className="chart-scroll"[\s\S]*?role="region"[\s\S]*?aria-label="카테고리별 알람 추세 차트"/);
+  assert.doesNotMatch(page, /className="(?:table|chart)-scroll"[^>]*tabIndex=\{0\}/);
   assert.match(css, /\.table-scroll,\.chart-scroll\s*\{[^}]*overflow-x:\s*auto[^}]*\}/);
   assert.match(css, /@media\s*\(max-width:\s*600px\)[\s\S]*?\.chart\s*\{[^}]*min-width:\s*520px[^}]*\}/);
 });
@@ -142,11 +157,12 @@ test("analysis dialog manages focus, Escape, and background inertness", async ()
   const source = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
 
   assert.match(source, /const dialogRef = useRef<HTMLElement>/);
-  assert.match(source, /previousFocus\.current = document\.activeElement/);
+  assert.match(source, /previousFocus\.current\s*=\s*document\.activeElement/);
   assert.match(source, /event\.key === "Escape"/);
   assert.match(source, /event\.key !== "Tab"/);
   assert.match(source, /previousFocus\.current\?\.focus\(\)/);
   assert.match(source, /ref=\{dialogRef\}[^>]*tabIndex=\{-1\}/);
+  assert.match(source, /className="overlay-dismiss"[\s\S]*?aria-label="분석 패널 닫기"[\s\S]*?onClick=\{onClose\}/);
   assert.match(source, /className="sidebar" inert=\{analysisPanel \? true : undefined\}/);
   assert.match(source, /className="workspace" inert=\{analysisPanel \? true : undefined\}/);
 });
@@ -160,10 +176,43 @@ test("keeps alarm drawer actions clear of scrollable details and labels the acti
   assert.match(css, /\.drawer\s*\{[^}]*display:\s*flex[^}]*flex-direction:\s*column[^}]*overflow:\s*hidden[^}]*\}/s);
   assert.match(css, /\.drawer-body\s*\{[^}]*flex:\s*1[^}]*min-height:\s*0[^}]*overflow-y:\s*auto[^}]*\}/s);
   assert.match(css, /\.drawer-footer\s*\{[^}]*position:\s*relative[^}]*flex:\s*none[^}]*\}/s);
-  assert.match(page, />저장 및 승인 요청<\/button>/);
+  assert.match(page, />\s*저장 및 승인 요청\s*<\/button>/);
   assert.match(css, /\.modal footer\s*\{[^}]*position:\s*sticky[^}]*bottom:\s*0[^}]*\}/s);
   assert.match(css, /\.modal footer \.black\s*\{[^}]*min-width:\s*180px[^}]*\}/s);
   assert.match(css, /\.drawer-footer \.black,\.modal footer \.black\s*\{[^}]*background:\s*#050505[^}]*color:\s*#fff[^}]*\}/s);
+});
+
+test("uses an accessible related-information accordion and sample-delay workflow drawer", async () => {
+  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  const alarmDrawer =
+    page.match(/function AlarmDrawer\([\s\S]*?\n}\n\nconst relatedInfo =/)?.[0] ?? "";
+  const relatedAccordion =
+    page.match(/function RelatedInfoAccordion\(\)[\s\S]*?\n}\n\nfunction SampleDelayDrawer/)?.[0] ?? "";
+  const sampleDelayDrawer =
+    page.match(/function SampleDelayDrawer\([\s\S]*?\n}\n\nfunction NewCase/)?.[0] ?? "";
+
+  assert.match(page, /function RelatedInfoAccordion/);
+  assert.match(page, /aria-expanded=\{expanded\}/);
+  assert.match(page, /aria-controls=\{panelId\}/);
+  assert.match(page, /id=\{panelId\} hidden=\{!expanded\}/);
+  assert.match(relatedAccordion, /onClick=\{\(\) => setOpen\(label\)\}/);
+  assert.doesNotMatch(relatedAccordion, /setOpen\(expanded \? "" : label\)/);
+  assert.doesNotMatch(alarmDrawer, /\btab\??:|\bsetTab\??:|const tabs =|drawer-tab-content/);
+  assert.doesNotMatch(page, /drawer-tabs|drawer-tab-content|demo-attachment/);
+  assert.doesNotMatch(css, /\.drawer-tabs|\.drawer-tab-content|\.demo-attachment/);
+  assert.match(page, /alarm\.type === "Sample Delay"\s*\?\s*\(?\s*<SampleDelayDrawer/);
+  assert.match(page, /function SampleDelayDrawer/);
+  assert.match(page, /샘플 의뢰[\s\S]*시험 접수[\s\S]*시험 분석 완료[\s\S]*판정 지연/);
+  assert.match(page, /경과 시간/);
+  assert.match(page, /허용 기준/);
+  assert.match(page, /초과 시간/);
+  assert.match(sampleDelayDrawer, /<b>경과 시간<\/b>\s*<span>68분<\/span>/);
+  assert.match(sampleDelayDrawer, /<b>허용 기준<\/b>\s*<span>30분<\/span>/);
+  assert.match(sampleDelayDrawer, /<b>초과 시간<\/b>\s*<span>38분<\/span>/);
+  assert.doesNotMatch(sampleDelayDrawer, /<b>경과 시간<\/b>\s*<span>11:08<\/span>/);
+  assert.match(css, /\.related-info-control/);
+  assert.match(css, /\.sample-delay-stage\.delay/);
 });
 
 test("splits master tabs into distinct editable rule and code management surfaces", async () => {
@@ -181,8 +230,24 @@ test("splits master tabs into distinct editable rule and code management surface
   assert.match(page, /aria-label="규칙명 수정"/);
   assert.match(page, /aria-label="적용 범위 수정"/);
   assert.match(page, /aria-label="임계값 수정"/);
-  assert.match(page, />활성<\/button>[\s\S]*?>비활성<\/button>/);
+  assert.match(page, />\s*활성\s*<\/button>[\s\S]*?>\s*비활성\s*<\/button>/);
   assert.doesNotMatch(page, /window\.prompt/);
-  assert.match(css, /\.rule-state-choice\.active[^}]*background:\s*#[0-9a-f]{6}[^}]*color:\s*#fff/i);
-  assert.match(css, /\.rule-state-choice\.inactive[^}]*background:\s*#[0-9a-f]{6}[^}]*color:\s*#fff/i);
+  assert.match(css, /\.rule-state-choice\.active\.selected[^}]*background:\s*#[0-9a-f]{6}[^}]*color:\s*#fff/i);
+  assert.match(css, /\.rule-state-choice\.inactive\.selected[^}]*background:\s*#[0-9a-f]{6}[^}]*color:\s*#fff/i);
+});
+
+test("uses Korean-first action-plan labels and clearly distinguished rule states", async () => {
+  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+
+  assert.match(page, /<h3>🟣 원인 분석<\/h3>/);
+  assert.match(page, /\n\s*현상\n\s*<textarea/);
+  assert.match(page, /\n\s*근본 원인\n\s*<textarea/);
+  assert.match(page, /<h3>▣ 조치 계획<\/h3>/);
+  assert.match(page, /aria-pressed=\{active\}/);
+  assert.match(page, /aria-pressed=\{!active\}/);
+  assert.match(css, /\.rule-state-choice\.active\.selected\{[^}]*background:\s*#16803b[^}]*color:\s*#fff[^}]*\}/);
+  assert.match(css, /\.rule-state-choice\.inactive\.selected\{[^}]*background:\s*#c52229[^}]*color:\s*#fff[^}]*\}/);
+  assert.match(css, /\.rule-state-choice\{[^}]*border:\s*2px solid #[0-9a-f]{6}[^}]*\}/i);
+  assert.match(css, /\.rule-state-choice:focus-visible\{[^}]*outline:\s*3px solid #[0-9a-f]{6}[^}]*\}/i);
 });

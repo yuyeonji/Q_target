@@ -51,6 +51,47 @@ test("maps persisted display codes while retaining UUID action IDs", async () =>
   assert.match(page, /id:\s*item\.id/);
 });
 
+test("persists every dashboard save action before reloading rendered data", async () => {
+  const pageSource = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const newCaseHandler = pageSource.match(/const createNewCase[\s\S]*?const openActionPlan/)?.[0] ?? "";
+  const actionPlanSave = pageSource.match(/onSave=\{async \(\{ rootCause, immediateAction, preventiveAction \}\) => \{[\s\S]*?\r?\n          }}\r?\n        \/>/)?.[0] ?? "";
+  const codeManagement = pageSource.match(/function CodeManagement\([\s\S]*?\r?\n}\r?\n\r?\nfunction MasterNote/)?.[0] ?? "";
+  const ruleManagement = pageSource.match(/function RuleManagement\([\s\S]*?\r?\n}\r?\n\r?\nfunction Kpi/)?.[0] ?? "";
+
+  assert.match(pageSource, /await createTarget\(/);
+  assert.match(pageSource, /await updateAlarm\(/);
+  assert.match(pageSource, /await createMasterRule\(/);
+  assert.match(pageSource, /await updateMasterRule\(/);
+  assert.match(pageSource, /await createMasterCode\(/);
+  assert.match(pageSource, /await updateMasterCode\(/);
+  assert.match(pageSource, /await reloadPersistedData\(/);
+  assert.doesNotMatch(pageSource, /id: `TRG-\$\{Date\.now/);
+  assert.match(pageSource, /const reloadPersistedData[\s\S]*?listAlarms\([\s\S]*?listTargets\([\s\S]*?listMasterRules\("alarm"\)[\s\S]*?listMasterRules\("conversion"\)[\s\S]*?listMasterCodes\(/);
+  assert.match(newCaseHandler, /await createTarget\([\s\S]*?await reloadPersistedData\([\s\S]*?setNewCase\(false\)/);
+  assert.match(actionPlanSave, /await saveActionPlan\([\s\S]*?await reloadPersistedData\([\s\S]*?setActionPlan\(false\)/);
+  assert.doesNotMatch(actionPlanSave, /setTargetItems\(/);
+  assert.match(codeManagement, /await createMasterCode\([\s\S]*?await reloadPersistedData\([\s\S]*?setDraft/);
+  assert.match(codeManagement, /await updateMasterCode\([\s\S]*?await reloadPersistedData\([\s\S]*?setEditing\(null\)/);
+  assert.doesNotMatch(codeManagement, /setCodes\(/);
+  assert.match(ruleManagement, /await createMasterRule\([\s\S]*?await reloadPersistedData\([\s\S]*?setDraft/);
+  assert.match(ruleManagement, /await updateMasterRule\([\s\S]*?await reloadPersistedData\([\s\S]*?setEditing\(null\)/);
+  assert.doesNotMatch(ruleManagement, /setRules\(/);
+});
+
+test("persists controlled action-plan analysis values on successful save", async () => {
+  const pageSource = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const actionPlan = pageSource.match(/function ActionPlan\([\s\S]*?\r?\n}\r?\n\r?\nfunction QuickPanel/)?.[0] ?? "";
+  const actionPlanSave = pageSource.match(/onSave=\{async \(\{ rootCause, immediateAction, preventiveAction \}\) => \{[\s\S]*?\r?\n          }}\r?\n        \/>/)?.[0] ?? "";
+
+  assert.match(actionPlan, /const \[immediateAction, setImmediateAction\] = useState/);
+  assert.match(actionPlan, /const \[rootCause, setRootCause\] = useState/);
+  assert.match(actionPlan, /const \[preventiveAction, setPreventiveAction\] = useState/);
+  assert.match(actionPlan, /value=\{immediateAction\}[\s\S]*?onChange=\{\(event\) => setImmediateAction/);
+  assert.match(actionPlan, /value=\{rootCause\}[\s\S]*?onChange=\{\(event\) => setRootCause/);
+  assert.match(actionPlan, /value=\{preventiveAction\}[\s\S]*?onChange=\{\(event\) => setPreventiveAction/);
+  assert.match(actionPlanSave, /rootCause,\s*immediateAction,\s*preventiveAction,/);
+});
+
 test("includes complete demo control surfaces", async () => {
   const source = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   assert.match(source, /알림 센터/);

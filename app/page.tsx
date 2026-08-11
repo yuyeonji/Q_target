@@ -2,11 +2,19 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  createMasterCode,
+  createMasterRule,
+  createTarget,
   getAlarmDetail,
   listAlarms,
+  listMasterCodes,
+  listMasterRules,
   listTargets,
   saveActionPlan,
   type SampleDelayStage,
+  updateAlarm,
+  updateMasterCode,
+  updateMasterRule,
   updateTarget,
 } from "@/lib/client-api";
 
@@ -43,6 +51,7 @@ type Target = {
 };
 type Rule = {
   id: string;
+  code?: string;
   name: string;
   scope: string;
   threshold: string;
@@ -296,12 +305,21 @@ export default function Home() {
   );
   const [codes, setCodes] = useState(initialCodes);
   const closeAnalysis = useCallback(() => setAnalysisPanel(null), []);
-  const loadPersistedData = useCallback(async () => {
+  const reloadPersistedData = useCallback(async () => {
     setDataState("loading");
     try {
-      const [persistedAlarms, persistedTargets] = await Promise.all([
+      const [
+        persistedAlarms,
+        persistedTargets,
+        persistedAlarmRules,
+        persistedConversionRules,
+        persistedCodes,
+      ] = await Promise.all([
         listAlarms(),
         listTargets(),
+        listMasterRules("alarm"),
+        listMasterRules("conversion"),
+        listMasterCodes(),
       ]);
       setAlarmItems(persistedAlarms.map((item) => ({
         id: item.id,
@@ -324,15 +342,39 @@ export default function Home() {
         due: item.dueDate ? item.dueDate.slice(0, 10) : "미정",
         sourceAlarmId: item.sourceAlarmId ?? undefined,
       })));
+      setAlarmRules(persistedAlarmRules.map((item) => ({
+        id: item.id,
+        code: item.ruleCode,
+        name: item.name,
+        scope: item.scope,
+        threshold: item.threshold,
+        active: item.active,
+      })));
+      setConversionRules(persistedConversionRules.map((item) => ({
+        id: item.id,
+        code: item.ruleCode,
+        name: item.name,
+        scope: item.scope,
+        threshold: item.threshold,
+        active: item.active,
+      })));
+      setCodes(persistedCodes.map((item) => ({
+        id: item.id,
+        code: item.code,
+        name: item.name,
+        category: item.category,
+        active: item.active,
+      })));
       setDataState("ready");
-    } catch {
+    } catch (error) {
       setDataState("error");
+      throw error;
     }
   }, []);
 
   useEffect(() => {
-    void loadPersistedData();
-  }, [loadPersistedData]);
+    void reloadPersistedData().catch(() => undefined);
+  }, [reloadPersistedData]);
 
   useEffect(() => {
     if (!alarm || alarm.type !== "Sample Delay") {
@@ -409,21 +451,53 @@ export default function Home() {
     URL.revokeObjectURL(link.href);
     showNotice(`${filename} 파일을 내려받았습니다.`);
   };
-  const updateAlarm = (status: AlarmStatus, message: string) => {
+  const updateAlarmStatus = async (status: AlarmStatus, message: string) => {
     if (!alarm) return;
-    setAlarmItems((items) =>
-      items.map((item) =>
-        item.id === alarm.id
-          ? {
-              ...item,
-              status,
-              reviewer: status === "종결" ? "시스템" : "품질 검토팀",
-            }
-          : item,
-      ),
-    );
-    setAlarm(null);
-    showNotice(message);
+    try {
+      await updateAlarm(alarm.id, {
+        status,
+        reviewer: status === "종결" ? "시스템" : "품질 검토팀",
+      });
+      await reloadPersistedData();
+      setAlarm(null);
+      showNotice(message);
+    } catch {
+      showNotice("저장에 실패했습니다. 이전 상태는 유지됩니다. 다시 시도해 주세요.");
+    }
+  };
+  const createNewCase = async (name: string, priority: string) => {
+    try {
+      await createTarget({
+        name,
+        priority,
+        status: "대기",
+        owner: "담당자 미지정",
+      });
+      await reloadPersistedData();
+      setNewCase(false);
+      setView("targets");
+      showNotice("관리대상을 등록했습니다.");
+    } catch {
+      showNotice("저장에 실패했습니다. 다시 시도해 주세요.");
+    }
+  };
+  const openActionPlan = async () => {
+    if (!alarm) return;
+    try {
+      await updateAlarm(alarm.id, {
+        status: "검토중",
+        reviewer: "품질 검토팀",
+      });
+      await reloadPersistedData();
+      setSelectedTarget(
+        targetItems.find((target) => target.sourceAlarmId === alarm.id) ?? null,
+      );
+      setActionPlanAlarmId(alarm.id);
+      setAlarm(null);
+      setActionPlan(true);
+    } catch {
+      showNotice("저장에 실패했습니다. 이전 상태는 유지됩니다. 다시 시도해 주세요.");
+    }
   };
 
   return (
@@ -488,7 +562,7 @@ export default function Home() {
                 ? "저장된 데이터를 불러오는 중입니다."
                 : "저장된 데이터를 불러오지 못했습니다. 현재 화면의 예시 데이터를 표시합니다."}
               {dataState === "error" && (
-                <button onClick={() => void loadPersistedData()}>다시 시도</button>
+                <button onClick={() => void reloadPersistedData().catch(() => undefined)}>다시 시도</button>
               )}
             </div>
           )}
@@ -578,11 +652,9 @@ export default function Home() {
               tab={masterTab}
               setTab={setMasterTab}
               alarmRules={alarmRules}
-              setAlarmRules={setAlarmRules}
               conversionRules={conversionRules}
-              setConversionRules={setConversionRules}
               codes={codes}
-              setCodes={setCodes}
+              reloadPersistedData={reloadPersistedData}
               showNotice={showNotice}
             />
           )}
@@ -592,22 +664,7 @@ export default function Home() {
       {newCase && (
         <NewCase
           onClose={() => setNewCase(false)}
-          onCreate={(name, priority) => {
-            setTargetItems((items) => [
-              {
-                id: `TRG-${Date.now().toString().slice(-4)}`,
-                name,
-                status: "대기",
-                owner: "담당자 미지정",
-                priority,
-                due: "미정",
-              },
-              ...items,
-            ]);
-            setNewCase(false);
-            setView("targets");
-            showNotice("새 관리대상을 등록했습니다.");
-          }}
+          onCreate={createNewCase}
         />
       )}
       {notificationOpen && (
@@ -653,48 +710,24 @@ export default function Home() {
             stages={sampleDelayStages}
             onClose={() => setAlarm(null)}
             onCloseAlarm={() =>
-              updateAlarm("종결", "알람을 조치 불필요로 종결했습니다.")
+              void updateAlarmStatus("종결", "알람을 조치 불필요로 종결했습니다.")
             }
             onMonitor={() =>
-              updateAlarm("검토중", "알람을 모니터링 상태로 전환했습니다.")
+              void updateAlarmStatus("검토중", "알람을 모니터링 상태로 전환했습니다.")
             }
-            onAction={() => {
-              setAlarmItems((items) =>
-                items.map((item) =>
-                  item.id === alarm.id
-                    ? { ...item, status: "검토중", reviewer: "품질 검토팀" }
-                    : item,
-                ),
-              );
-              setSelectedTarget(targetItems.find((target) => target.sourceAlarmId === alarm.id) ?? null);
-              setActionPlanAlarmId(alarm.id);
-              setAlarm(null);
-              setActionPlan(true);
-            }}
+            onAction={() => void openActionPlan()}
           />
         ) : (
           <AlarmDrawer
             alarm={alarm}
             onClose={() => setAlarm(null)}
             onCloseAlarm={() =>
-              updateAlarm("종결", "알람을 조치 불필요로 종결했습니다.")
+              void updateAlarmStatus("종결", "알람을 조치 불필요로 종결했습니다.")
             }
             onMonitor={() =>
-              updateAlarm("검토중", "알람을 모니터링 상태로 전환했습니다.")
+              void updateAlarmStatus("검토중", "알람을 모니터링 상태로 전환했습니다.")
             }
-            onAction={() => {
-              setAlarmItems((items) =>
-                items.map((item) =>
-                  item.id === alarm.id
-                    ? { ...item, status: "검토중", reviewer: "품질 검토팀" }
-                    : item,
-                ),
-              );
-              setSelectedTarget(targetItems.find((target) => target.sourceAlarmId === alarm.id) ?? null);
-              setActionPlanAlarmId(alarm.id);
-              setAlarm(null);
-              setActionPlan(true);
-            }}
+            onAction={() => void openActionPlan()}
           />
         ))}
       {actionPlan && (
@@ -710,11 +743,14 @@ export default function Home() {
           onAdd={addTask}
           onDelete={(id) => setTasks(tasks.filter((task) => task.id !== id))}
           onClose={() => setActionPlan(false)}
-          onSave={async () => {
+          onSave={async ({ rootCause, immediateAction, preventiveAction }) => {
             try {
               await saveActionPlan({
                 alarmId: actionPlanAlarmId,
                 targetId: selectedTarget?.id ?? null,
+                rootCause,
+                immediateAction,
+                preventiveAction,
                 status: "진행 중",
                 tasks: tasks.map((task) => ({
                   description: task.title,
@@ -725,17 +761,11 @@ export default function Home() {
               if (selectedTarget) {
                 await updateTarget(selectedTarget.id, { status: "진행 중" });
               }
+              await reloadPersistedData();
             } catch {
               showNotice("저장에 실패했습니다. 이전 상태는 유지됩니다. 다시 시도해 주세요.");
               return;
             }
-            setTargetItems((items) =>
-              items.map((target) =>
-                target.id === selectedTarget?.id
-                  ? { ...target, status: "진행 중" }
-                  : target,
-              ),
-            );
             setActionPlan(false);
             showNotice(
               "조치계획을 저장하고 관리대상을 진행 상태로 변경했습니다.",
@@ -1161,21 +1191,17 @@ function Master({
   tab = "최근 유사 알람",
   setTab,
   alarmRules,
-  setAlarmRules,
   conversionRules,
-  setConversionRules,
   codes,
-  setCodes,
+  reloadPersistedData,
   showNotice,
 }: {
   tab: string;
   setTab: (value: string) => void;
   alarmRules: Rule[];
-  setAlarmRules: (rules: Rule[]) => void;
   conversionRules: Rule[];
-  setConversionRules: (rules: Rule[]) => void;
   codes: MasterCode[];
-  setCodes: (codes: MasterCode[]) => void;
+  reloadPersistedData: () => Promise<void>;
   showNotice: (message: string) => void;
 }) {
   const tabs = ["알람 규칙", "전환 규칙", "코드 관리"];
@@ -1218,9 +1244,10 @@ function Master({
             scopeLabel="감시 범위"
             thresholdLabel="알람 임계값"
             idPrefix="ALR"
+            kind="alarm"
             filename="q-target-rules.csv"
             rules={alarmRules}
-            setRules={setAlarmRules}
+            reloadPersistedData={reloadPersistedData}
             showNotice={showNotice}
           />
         )}
@@ -1232,16 +1259,17 @@ function Master({
             scopeLabel="전환 대상 범위"
             thresholdLabel="전환 임계값"
             idPrefix="CVR"
+            kind="conversion"
             filename="q-target-conversion-rules.csv"
             rules={conversionRules}
-            setRules={setConversionRules}
+            reloadPersistedData={reloadPersistedData}
             showNotice={showNotice}
           />
         )}
         {tab === "코드 관리" && (
           <CodeManagement
             codes={codes}
-            setCodes={setCodes}
+            reloadPersistedData={reloadPersistedData}
             showNotice={showNotice}
           />
         )}
@@ -1302,38 +1330,36 @@ function RuleStateChoices({
 
 function CodeManagement({
   codes,
-  setCodes,
+  reloadPersistedData,
   showNotice,
 }: {
   codes: MasterCode[];
-  setCodes: (codes: MasterCode[]) => void;
+  reloadPersistedData: () => Promise<void>;
   showNotice: (message: string) => void;
 }) {
   const [draft, setDraft] = useState({ code: "", name: "", category: "" });
   const [editing, setEditing] = useState<MasterCode | null>(null);
   const updateDraft = (field: keyof typeof draft, value: string) =>
     setDraft({ ...draft, [field]: value });
-  const addCode = (event: React.FormEvent) => {
+  const addCode = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!draft.code.trim() || !draft.name.trim() || !draft.category.trim())
       return showNotice("코드값, 코드명, 코드 분류를 모두 입력해 주세요.");
-    const nextNumber =
-      Math.max(0, ...codes.map((code) => Number(code.id.split("-")[1]) || 0)) +
-      1;
-    setCodes([
-      ...codes,
-      {
-        id: `COD-${String(nextNumber).padStart(3, "0")}`,
+    try {
+      await createMasterCode({
         code: draft.code.trim().toUpperCase(),
         name: draft.name.trim(),
         category: draft.category.trim(),
         active: true,
-      },
-    ]);
-    setDraft({ code: "", name: "", category: "" });
-    showNotice("새 코드를 추가했습니다.");
+      });
+      await reloadPersistedData();
+      setDraft({ code: "", name: "", category: "" });
+      showNotice("새 코드를 추가했습니다.");
+    } catch {
+      showNotice("저장에 실패했습니다. 입력값은 유지됩니다. 다시 시도해 주세요.");
+    }
   };
-  const saveEdit = (event: React.FormEvent) => {
+  const saveEdit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (
       !editing ||
@@ -1342,20 +1368,19 @@ function CodeManagement({
       !editing.category.trim()
     )
       return showNotice("코드값, 코드명, 코드 분류를 모두 입력해 주세요.");
-    setCodes(
-      codes.map((code) =>
-        code.id === editing.id
-          ? {
-              ...editing,
-              code: editing.code.trim().toUpperCase(),
-              name: editing.name.trim(),
-              category: editing.category.trim(),
-            }
-          : code,
-      ),
-    );
-    setEditing(null);
-    showNotice("코드 변경사항을 저장했습니다.");
+    try {
+      await updateMasterCode(editing.id, {
+        code: editing.code.trim().toUpperCase(),
+        name: editing.name.trim(),
+        category: editing.category.trim(),
+        active: editing.active,
+      });
+      await reloadPersistedData();
+      setEditing(null);
+      showNotice("코드 변경사항을 저장했습니다.");
+    } catch {
+      showNotice("저장에 실패했습니다. 입력값은 유지됩니다. 다시 시도해 주세요.");
+    }
   };
   return (
     <article className="card rules master-surface">
@@ -1493,14 +1518,17 @@ function CodeManagement({
                       active={code.active}
                       label={`${code.name} 상태`}
                       onChange={(active) => {
-                        setCodes(
-                          codes.map((item) =>
-                            item.id === code.id ? { ...item, active } : item,
-                          ),
-                        );
-                        showNotice(
-                          `${code.name} 코드를 ${active ? "활성" : "비활성"}화했습니다.`,
-                        );
+                        void (async () => {
+                          try {
+                            await updateMasterCode(code.id, { active });
+                            await reloadPersistedData();
+                            showNotice(
+                              `${code.name} 코드를 ${active ? "활성" : "비활성"}화했습니다.`,
+                            );
+                          } catch {
+                            showNotice("저장에 실패했습니다. 이전 상태는 유지됩니다. 다시 시도해 주세요.");
+                          }
+                        })();
                       }}
                     />
                   </td>
@@ -1554,9 +1582,10 @@ function RuleManagement({
   scopeLabel,
   thresholdLabel,
   idPrefix,
+  kind,
   filename,
   rules,
-  setRules,
+  reloadPersistedData,
   showNotice,
 }: {
   title: string;
@@ -1564,36 +1593,40 @@ function RuleManagement({
   scopeLabel: string;
   thresholdLabel: string;
   idPrefix: string;
+  kind: string;
   filename: string;
   rules: Rule[];
-  setRules: (rules: Rule[]) => void;
+  reloadPersistedData: () => Promise<void>;
   showNotice: (message: string) => void;
 }) {
   const [draft, setDraft] = useState({ name: "", scope: "", threshold: "" });
   const [editing, setEditing] = useState<Rule | null>(null);
   const updateDraft = (field: keyof typeof draft, value: string) =>
     setDraft({ ...draft, [field]: value });
-  const addRule = (event: React.FormEvent) => {
+  const addRule = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!draft.name.trim() || !draft.scope.trim() || !draft.threshold.trim())
       return showNotice("규칙명, 적용 범위, 임계값을 모두 입력해 주세요.");
     const nextNumber =
-      Math.max(0, ...rules.map((rule) => Number(rule.id.split("-")[1]) || 0)) +
+      Math.max(0, ...rules.map((rule) => Number((rule.code ?? rule.id).split("-")[1]) || 0)) +
       1;
-    setRules([
-      ...rules,
-      {
-        id: `${idPrefix}-${String(nextNumber).padStart(3, "0")}`,
+    try {
+      await createMasterRule({
+        ruleCode: `${idPrefix}-${String(nextNumber).padStart(3, "0")}`,
+        kind,
         name: draft.name.trim(),
         scope: draft.scope.trim(),
         threshold: draft.threshold.trim(),
         active: true,
-      },
-    ]);
-    setDraft({ name: "", scope: "", threshold: "" });
-    showNotice(`${title}에 새 규칙을 추가했습니다.`);
+      });
+      await reloadPersistedData();
+      setDraft({ name: "", scope: "", threshold: "" });
+      showNotice(`${title}에 새 규칙을 추가했습니다.`);
+    } catch {
+      showNotice("저장에 실패했습니다. 입력값은 유지됩니다. 다시 시도해 주세요.");
+    }
   };
-  const saveEdit = (event: React.FormEvent) => {
+  const saveEdit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (
       !editing ||
@@ -1602,26 +1635,28 @@ function RuleManagement({
       !editing.threshold.trim()
     )
       return showNotice("규칙명, 적용 범위, 임계값을 모두 입력해 주세요.");
-    setRules(
-      rules.map((rule) =>
-        rule.id === editing.id
-          ? {
-              ...editing,
-              name: editing.name.trim(),
-              scope: editing.scope.trim(),
-              threshold: editing.threshold.trim(),
-            }
-          : rule,
-      ),
-    );
-    setEditing(null);
-    showNotice("규칙 변경사항을 저장했습니다.");
+    try {
+      await updateMasterRule(editing.id, {
+        name: editing.name.trim(),
+        scope: editing.scope.trim(),
+        threshold: editing.threshold.trim(),
+        active: editing.active,
+      });
+      await reloadPersistedData();
+      setEditing(null);
+      showNotice("규칙 변경사항을 저장했습니다.");
+    } catch {
+      showNotice("저장에 실패했습니다. 입력값은 유지됩니다. 다시 시도해 주세요.");
+    }
   };
-  const setActive = (rule: Rule, active: boolean) => {
-    setRules(
-      rules.map((item) => (item.id === rule.id ? { ...item, active } : item)),
-    );
-    showNotice(`${rule.name} 규칙을 ${active ? "활성" : "비활성"}화했습니다.`);
+  const setActive = async (rule: Rule, active: boolean) => {
+    try {
+      await updateMasterRule(rule.id, { active });
+      await reloadPersistedData();
+      showNotice(`${rule.name} 규칙을 ${active ? "활성" : "비활성"}화했습니다.`);
+    } catch {
+      showNotice("저장에 실패했습니다. 이전 상태는 유지됩니다. 다시 시도해 주세요.");
+    }
   };
   return (
     <article className="card rules master-surface">
@@ -2408,8 +2443,21 @@ function ActionPlan({
   onAdd: () => void;
   onDelete: (id: number) => void;
   onClose: () => void;
-  onSave: () => void;
+  onSave: (analysis: {
+    rootCause: string;
+    immediateAction: string;
+    preventiveAction: string;
+  }) => void | Promise<void>;
 }) {
+  const [immediateAction, setImmediateAction] = useState(
+    "발생한 현상을 객관적인 사실 기반으로 상세히 기술하세요.",
+  );
+  const [rootCause, setRootCause] = useState(
+    "5Why 분석을 통한 근본 원인을 기술하세요.",
+  );
+  const [preventiveAction, setPreventiveAction] = useState(
+    "재발 방지를 위한 예방 조치를 기술하세요.",
+  );
   return (
     <div className="overlay modal-overlay">
       <section className="modal">
@@ -2449,15 +2497,22 @@ function ActionPlan({
               <label>
                 현상
                 <textarea
-                  defaultValue={
-                    "발생한 현상을 객관적인 사실 기반으로 상세히 기술하세요."
-                  }
+                  value={immediateAction}
+                  onChange={(event) => setImmediateAction(event.target.value)}
                 />
               </label>
               <label>
                 근본 원인
                 <textarea
-                  defaultValue={"5Why 분석을 통한 근본 원인을 기술하세요."}
+                  value={rootCause}
+                  onChange={(event) => setRootCause(event.target.value)}
+                />
+              </label>
+              <label>
+                예방 조치
+                <textarea
+                  value={preventiveAction}
+                  onChange={(event) => setPreventiveAction(event.target.value)}
                 />
               </label>
             </div>
@@ -2540,7 +2595,12 @@ function ActionPlan({
         </div>
         <footer>
           <button onClick={onClose}>취소 (Cancel)</button>
-          <button className="black" onClick={onSave}>
+          <button
+            className="black"
+            onClick={() =>
+              void onSave({ rootCause, immediateAction, preventiveAction })
+            }
+          >
             저장 및 승인 요청
           </button>
         </footer>

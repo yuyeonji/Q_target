@@ -304,6 +304,7 @@ export default function Home() {
     initialConversionRules,
   );
   const [codes, setCodes] = useState(initialCodes);
+  const persistenceReady = dataState === "ready";
   const closeAnalysis = useCallback(() => setAnalysisPanel(null), []);
   const reloadPersistedData = useCallback(async () => {
     setDataState("loading");
@@ -452,6 +453,7 @@ export default function Home() {
     showNotice(`${filename} 파일을 내려받았습니다.`);
   };
   const updateAlarmStatus = async (status: AlarmStatus, message: string) => {
+    if (!persistenceReady) return;
     if (!alarm) return;
     try {
       await updateAlarm(alarm.id, {
@@ -466,6 +468,7 @@ export default function Home() {
     }
   };
   const createNewCase = async (name: string, priority: string) => {
+    if (!persistenceReady) return;
     try {
       await createTarget({
         name,
@@ -473,15 +476,21 @@ export default function Home() {
         status: "대기",
         owner: "담당자 미지정",
       });
-      await reloadPersistedData();
-      setNewCase(false);
-      setView("targets");
-      showNotice("관리대상을 등록했습니다.");
     } catch {
       showNotice("저장에 실패했습니다. 다시 시도해 주세요.");
+      return;
+    }
+    setNewCase(false);
+    setView("targets");
+    try {
+      await reloadPersistedData();
+      showNotice("관리대상을 등록했습니다.");
+    } catch {
+      showNotice("관리대상 저장은 완료되었습니다. 최신 데이터를 불러오지 못했습니다. 다시 시도 버튼으로 새로고침하세요.");
     }
   };
   const openActionPlan = async () => {
+    if (!persistenceReady) return;
     if (!alarm) return;
     try {
       await updateAlarm(alarm.id, {
@@ -548,7 +557,11 @@ export default function Home() {
             <button aria-label="설정" onClick={() => setSettingsOpen(true)}>
               ⚙
             </button>
-            <button className="black" onClick={() => setNewCase(true)}>
+            <button
+              className="black"
+              disabled={!persistenceReady}
+              onClick={() => setNewCase(true)}
+            >
               신규 케이스
             </button>
             <span className="avatar">YC</span>
@@ -654,6 +667,7 @@ export default function Home() {
               alarmRules={alarmRules}
               conversionRules={conversionRules}
               codes={codes}
+              persistenceReady={persistenceReady}
               reloadPersistedData={reloadPersistedData}
               showNotice={showNotice}
             />
@@ -663,6 +677,7 @@ export default function Home() {
 
       {newCase && (
         <NewCase
+          persistenceReady={persistenceReady}
           onClose={() => setNewCase(false)}
           onCreate={createNewCase}
         />
@@ -708,6 +723,7 @@ export default function Home() {
           <SampleDelayDrawer
             alarm={alarm}
             stages={sampleDelayStages}
+            persistenceReady={persistenceReady}
             onClose={() => setAlarm(null)}
             onCloseAlarm={() =>
               void updateAlarmStatus("종결", "알람을 조치 불필요로 종결했습니다.")
@@ -720,6 +736,7 @@ export default function Home() {
         ) : (
           <AlarmDrawer
             alarm={alarm}
+            persistenceReady={persistenceReady}
             onClose={() => setAlarm(null)}
             onCloseAlarm={() =>
               void updateAlarmStatus("종결", "알람을 조치 불필요로 종결했습니다.")
@@ -732,6 +749,7 @@ export default function Home() {
         ))}
       {actionPlan && (
         <ActionPlan
+          persistenceReady={persistenceReady}
           targetName={selectedTarget?.name ?? "설비 비정상 진동 발생"}
           tasks={tasks}
           newTask={newTask}
@@ -744,6 +762,15 @@ export default function Home() {
           onDelete={(id) => setTasks(tasks.filter((task) => task.id !== id))}
           onClose={() => setActionPlan(false)}
           onSave={async ({ rootCause, immediateAction, preventiveAction }) => {
+            if (!persistenceReady) return;
+            if (selectedTarget) {
+              try {
+                await updateTarget(selectedTarget.id, { status: "진행 중" });
+              } catch {
+                showNotice("관리대상 상태 변경에 실패했습니다. 조치계획은 저장되지 않았으며 입력값은 유지됩니다.");
+                return;
+              }
+            }
             try {
               await saveActionPlan({
                 alarmId: actionPlanAlarmId,
@@ -758,18 +785,19 @@ export default function Home() {
                   dueDate: task.due === "미정" ? null : task.due,
                 })),
               });
-              if (selectedTarget) {
-                await updateTarget(selectedTarget.id, { status: "진행 중" });
-              }
-              await reloadPersistedData();
             } catch {
-              showNotice("저장에 실패했습니다. 이전 상태는 유지됩니다. 다시 시도해 주세요.");
+              showNotice("조치계획 저장에 실패했습니다. 입력값은 유지됩니다. 다시 시도해 주세요.");
               return;
             }
             setActionPlan(false);
-            showNotice(
-              "조치계획을 저장하고 관리대상을 진행 상태로 변경했습니다.",
-            );
+            try {
+              await reloadPersistedData();
+              showNotice(
+                "조치계획을 저장하고 관리대상을 진행 상태로 변경했습니다.",
+              );
+            } catch {
+              showNotice("조치계획 저장은 완료되었습니다. 최신 데이터를 불러오지 못했습니다. 다시 시도 버튼으로 새로고침하세요.");
+            }
           }}
         />
       )}
@@ -1193,6 +1221,7 @@ function Master({
   alarmRules,
   conversionRules,
   codes,
+  persistenceReady,
   reloadPersistedData,
   showNotice,
 }: {
@@ -1201,6 +1230,7 @@ function Master({
   alarmRules: Rule[];
   conversionRules: Rule[];
   codes: MasterCode[];
+  persistenceReady: boolean;
   reloadPersistedData: () => Promise<void>;
   showNotice: (message: string) => void;
 }) {
@@ -1247,6 +1277,7 @@ function Master({
             kind="alarm"
             filename="q-target-rules.csv"
             rules={alarmRules}
+            persistenceReady={persistenceReady}
             reloadPersistedData={reloadPersistedData}
             showNotice={showNotice}
           />
@@ -1262,6 +1293,7 @@ function Master({
             kind="conversion"
             filename="q-target-conversion-rules.csv"
             rules={conversionRules}
+            persistenceReady={persistenceReady}
             reloadPersistedData={reloadPersistedData}
             showNotice={showNotice}
           />
@@ -1269,6 +1301,7 @@ function Master({
         {tab === "코드 관리" && (
           <CodeManagement
             codes={codes}
+            persistenceReady={persistenceReady}
             reloadPersistedData={reloadPersistedData}
             showNotice={showNotice}
           />
@@ -1300,10 +1333,12 @@ function downloadMasterCsv(
 function RuleStateChoices({
   active,
   label,
+  disabled,
   onChange,
 }: {
   active: boolean;
   label: string;
+  disabled: boolean;
   onChange: (active: boolean) => void;
 }) {
   return (
@@ -1312,6 +1347,7 @@ function RuleStateChoices({
         type="button"
         className={`rule-state-choice active ${active ? "selected" : ""}`}
         aria-pressed={active}
+        disabled={disabled}
         onClick={() => onChange(true)}
       >
         활성
@@ -1320,6 +1356,7 @@ function RuleStateChoices({
         type="button"
         className={`rule-state-choice inactive ${!active ? "selected" : ""}`}
         aria-pressed={!active}
+        disabled={disabled}
         onClick={() => onChange(false)}
       >
         비활성
@@ -1330,10 +1367,12 @@ function RuleStateChoices({
 
 function CodeManagement({
   codes,
+  persistenceReady,
   reloadPersistedData,
   showNotice,
 }: {
   codes: MasterCode[];
+  persistenceReady: boolean;
   reloadPersistedData: () => Promise<void>;
   showNotice: (message: string) => void;
 }) {
@@ -1343,6 +1382,7 @@ function CodeManagement({
     setDraft({ ...draft, [field]: value });
   const addCode = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (!persistenceReady) return;
     if (!draft.code.trim() || !draft.name.trim() || !draft.category.trim())
       return showNotice("코드값, 코드명, 코드 분류를 모두 입력해 주세요.");
     try {
@@ -1361,6 +1401,7 @@ function CodeManagement({
   };
   const saveEdit = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (!persistenceReady) return;
     if (
       !editing ||
       !editing.code.trim() ||
@@ -1380,6 +1421,18 @@ function CodeManagement({
       showNotice("코드 변경사항을 저장했습니다.");
     } catch {
       showNotice("저장에 실패했습니다. 입력값은 유지됩니다. 다시 시도해 주세요.");
+    }
+  };
+  const setActive = async (code: MasterCode, active: boolean) => {
+    if (!persistenceReady) return;
+    try {
+      await updateMasterCode(code.id, { active });
+      await reloadPersistedData();
+      showNotice(
+        `${code.name} 코드를 ${active ? "활성" : "비활성"}화했습니다.`,
+      );
+    } catch {
+      showNotice("저장에 실패했습니다. 이전 상태는 유지됩니다. 다시 시도해 주세요.");
     }
   };
   return (
@@ -1415,6 +1468,7 @@ function CodeManagement({
           <input
             aria-label="새 코드값"
             value={draft.code}
+            disabled={!persistenceReady}
             onChange={(event) => updateDraft("code", event.target.value)}
             placeholder="예: PRC-MCH"
           />
@@ -1424,6 +1478,7 @@ function CodeManagement({
           <input
             aria-label="새 코드명"
             value={draft.name}
+            disabled={!persistenceReady}
             onChange={(event) => updateDraft("name", event.target.value)}
             placeholder="코드명 입력"
           />
@@ -1433,11 +1488,12 @@ function CodeManagement({
           <input
             aria-label="새 코드 분류"
             value={draft.category}
+            disabled={!persistenceReady}
             onChange={(event) => updateDraft("category", event.target.value)}
             placeholder="분류 입력"
           />
         </label>
-        <button className="black" type="submit">
+        <button className="black" type="submit" disabled={!persistenceReady}>
           ＋ 새 코드 추가
         </button>
       </form>
@@ -1462,6 +1518,7 @@ function CodeManagement({
                     <input
                       aria-label="코드값 수정"
                       value={editing.code}
+                      disabled={!persistenceReady}
                       onChange={(event) =>
                         setEditing({ ...editing, code: event.target.value })
                       }
@@ -1471,6 +1528,7 @@ function CodeManagement({
                     <input
                       aria-label="코드명 수정"
                       value={editing.name}
+                      disabled={!persistenceReady}
                       onChange={(event) =>
                         setEditing({ ...editing, name: event.target.value })
                       }
@@ -1480,6 +1538,7 @@ function CodeManagement({
                     <input
                       aria-label="코드 분류 수정"
                       value={editing.category}
+                      disabled={!persistenceReady}
                       onChange={(event) =>
                         setEditing({ ...editing, category: event.target.value })
                       }
@@ -1489,12 +1548,13 @@ function CodeManagement({
                     <RuleStateChoices
                       active={editing.active}
                       label={`${editing.name} 상태`}
+                      disabled={!persistenceReady}
                       onChange={(active) => setEditing({ ...editing, active })}
                     />
                   </td>
                   <td>
                     <form className="edit-actions" onSubmit={saveEdit}>
-                      <button className="save" type="submit">
+                      <button className="save" type="submit" disabled={!persistenceReady}>
                         저장
                       </button>
                       <button type="button" onClick={() => setEditing(null)}>
@@ -1517,25 +1577,15 @@ function CodeManagement({
                     <RuleStateChoices
                       active={code.active}
                       label={`${code.name} 상태`}
-                      onChange={(active) => {
-                        void (async () => {
-                          try {
-                            await updateMasterCode(code.id, { active });
-                            await reloadPersistedData();
-                            showNotice(
-                              `${code.name} 코드를 ${active ? "활성" : "비활성"}화했습니다.`,
-                            );
-                          } catch {
-                            showNotice("저장에 실패했습니다. 이전 상태는 유지됩니다. 다시 시도해 주세요.");
-                          }
-                        })();
-                      }}
+                      disabled={!persistenceReady}
+                      onChange={(active) => void setActive(code, active)}
                     />
                   </td>
                   <td>
                     <button
                       type="button"
                       aria-label={`${code.name} 코드 수정`}
+                      disabled={!persistenceReady}
                       onClick={() => setEditing({ ...code })}
                     >
                       ✎ 수정
@@ -1585,6 +1635,7 @@ function RuleManagement({
   kind,
   filename,
   rules,
+  persistenceReady,
   reloadPersistedData,
   showNotice,
 }: {
@@ -1596,6 +1647,7 @@ function RuleManagement({
   kind: string;
   filename: string;
   rules: Rule[];
+  persistenceReady: boolean;
   reloadPersistedData: () => Promise<void>;
   showNotice: (message: string) => void;
 }) {
@@ -1605,6 +1657,7 @@ function RuleManagement({
     setDraft({ ...draft, [field]: value });
   const addRule = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (!persistenceReady) return;
     if (!draft.name.trim() || !draft.scope.trim() || !draft.threshold.trim())
       return showNotice("규칙명, 적용 범위, 임계값을 모두 입력해 주세요.");
     const nextNumber =
@@ -1628,6 +1681,7 @@ function RuleManagement({
   };
   const saveEdit = async (event: React.FormEvent) => {
     event.preventDefault();
+    if (!persistenceReady) return;
     if (
       !editing ||
       !editing.name.trim() ||
@@ -1650,6 +1704,7 @@ function RuleManagement({
     }
   };
   const setActive = async (rule: Rule, active: boolean) => {
+    if (!persistenceReady) return;
     try {
       await updateMasterRule(rule.id, { active });
       await reloadPersistedData();
@@ -1691,6 +1746,7 @@ function RuleManagement({
           <input
             aria-label="새 규칙명"
             value={draft.name}
+            disabled={!persistenceReady}
             onChange={(event) => updateDraft("name", event.target.value)}
             placeholder="규칙명 입력"
           />
@@ -1700,6 +1756,7 @@ function RuleManagement({
           <input
             aria-label={`새 ${scopeLabel}`}
             value={draft.scope}
+            disabled={!persistenceReady}
             onChange={(event) => updateDraft("scope", event.target.value)}
             placeholder="적용 범위 입력"
           />
@@ -1709,11 +1766,12 @@ function RuleManagement({
           <input
             aria-label={`새 ${thresholdLabel}`}
             value={draft.threshold}
+            disabled={!persistenceReady}
             onChange={(event) => updateDraft("threshold", event.target.value)}
             placeholder="임계값 입력"
           />
         </label>
-        <button className="black" type="submit">
+        <button className="black" type="submit" disabled={!persistenceReady}>
           ＋ 새 규칙 추가
         </button>
       </form>
@@ -1738,6 +1796,7 @@ function RuleManagement({
                     <input
                       aria-label="규칙명 수정"
                       value={editing.name}
+                      disabled={!persistenceReady}
                       onChange={(event) =>
                         setEditing({ ...editing, name: event.target.value })
                       }
@@ -1747,6 +1806,7 @@ function RuleManagement({
                     <input
                       aria-label="적용 범위 수정"
                       value={editing.scope}
+                      disabled={!persistenceReady}
                       onChange={(event) =>
                         setEditing({ ...editing, scope: event.target.value })
                       }
@@ -1756,6 +1816,7 @@ function RuleManagement({
                     <input
                       aria-label="임계값 수정"
                       value={editing.threshold}
+                      disabled={!persistenceReady}
                       onChange={(event) =>
                         setEditing({
                           ...editing,
@@ -1768,12 +1829,13 @@ function RuleManagement({
                     <RuleStateChoices
                       active={editing.active}
                       label={`${editing.name} 상태`}
+                      disabled={!persistenceReady}
                       onChange={(active) => setEditing({ ...editing, active })}
                     />
                   </td>
                   <td>
                     <form className="edit-actions" onSubmit={saveEdit}>
-                      <button className="save" type="submit">
+                      <button className="save" type="submit" disabled={!persistenceReady}>
                         저장
                       </button>
                       <button type="button" onClick={() => setEditing(null)}>
@@ -1794,6 +1856,7 @@ function RuleManagement({
                     <RuleStateChoices
                       active={rule.active}
                       label={`${rule.name} 상태`}
+                      disabled={!persistenceReady}
                       onChange={(active) => setActive(rule, active)}
                     />
                   </td>
@@ -1801,6 +1864,7 @@ function RuleManagement({
                     <button
                       type="button"
                       aria-label={`${rule.name} 규칙 수정`}
+                      disabled={!persistenceReady}
                       onClick={() => setEditing({ ...rule })}
                     >
                       ✎ 수정
@@ -2090,12 +2154,14 @@ function AlarmDrawer({
   onCloseAlarm,
   onMonitor,
   onAction,
+  persistenceReady,
 }: {
   alarm: Alarm;
   onClose: () => void;
   onCloseAlarm: () => void;
   onMonitor: () => void;
   onAction: () => void;
+  persistenceReady: boolean;
 }) {
   return (
     <div className="overlay">
@@ -2203,9 +2269,9 @@ function AlarmDrawer({
           <RelatedInfoAccordion />
         </div>
         <div className="drawer-footer">
-          <button onClick={onCloseAlarm}>조치 불필요 종결</button>
-          <button onClick={onMonitor}>모니터링 유지</button>
-          <button className="black" onClick={onAction}>
+          <button disabled={!persistenceReady} onClick={onCloseAlarm}>조치 불필요 종결</button>
+          <button disabled={!persistenceReady} onClick={onMonitor}>모니터링 유지</button>
+          <button className="black" disabled={!persistenceReady} onClick={onAction}>
             ✣ 관리대상 등록
           </button>
         </div>
@@ -2262,6 +2328,7 @@ function SampleDelayDrawer({
   onCloseAlarm,
   onMonitor,
   onAction,
+  persistenceReady,
 }: {
   alarm: Alarm;
   stages: SampleDelayStage[] | null;
@@ -2269,6 +2336,7 @@ function SampleDelayDrawer({
   onCloseAlarm: () => void;
   onMonitor: () => void;
   onAction: () => void;
+  persistenceReady: boolean;
 }) {
   const fallbackSummary = { elapsedMinutes: 68, allowedMinutes: 30, overageMinutes: 38 };
   const sampleDelaySummary = persistedStages?.length
@@ -2352,9 +2420,9 @@ function SampleDelayDrawer({
           <RelatedInfoAccordion />
         </div>
         <div className="drawer-footer">
-          <button onClick={onCloseAlarm}>조치 불필요 종결</button>
-          <button onClick={onMonitor}>모니터링 유지</button>
-          <button className="black" onClick={onAction}>
+          <button disabled={!persistenceReady} onClick={onCloseAlarm}>조치 불필요 종결</button>
+          <button disabled={!persistenceReady} onClick={onMonitor}>모니터링 유지</button>
+          <button className="black" disabled={!persistenceReady} onClick={onAction}>
             관리대상 등록
           </button>
         </div>
@@ -2366,9 +2434,11 @@ function SampleDelayDrawer({
 function NewCase({
   onClose,
   onCreate,
+  persistenceReady,
 }: {
   onClose: () => void;
   onCreate: (name: string, priority: string) => void;
+  persistenceReady: boolean;
 }) {
   const [name, setName] = useState("");
   const [priority, setPriority] = useState("중간");
@@ -2409,7 +2479,11 @@ function NewCase({
         </label>
         <footer>
           <button onClick={onClose}>취소</button>
-          <button className="black" onClick={() => onCreate(name, priority)}>
+          <button
+            className="black"
+            disabled={!persistenceReady}
+            onClick={() => onCreate(name, priority)}
+          >
             등록
           </button>
         </footer>
@@ -2431,6 +2505,7 @@ function ActionPlan({
   onDelete,
   onClose,
   onSave,
+  persistenceReady,
 }: {
   targetName: string;
   tasks: Task[];
@@ -2448,6 +2523,7 @@ function ActionPlan({
     immediateAction: string;
     preventiveAction: string;
   }) => void | Promise<void>;
+  persistenceReady: boolean;
 }) {
   const [immediateAction, setImmediateAction] = useState(
     "발생한 현상을 객관적인 사실 기반으로 상세히 기술하세요.",
@@ -2597,6 +2673,7 @@ function ActionPlan({
           <button onClick={onClose}>취소 (Cancel)</button>
           <button
             className="black"
+            disabled={!persistenceReady}
             onClick={() =>
               void onSave({ rootCause, immediateAction, preventiveAction })
             }

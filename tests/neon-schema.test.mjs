@@ -37,6 +37,15 @@ test("persists stable display codes for alarms and management targets", async ()
   assert.match(schema, /uniqueIndex\("targets_target_code_unique"\)\.on\(table\.targetCode\)/);
 });
 
+test("defines unique tables for master rules and master codes", async () => {
+  const schema = await readFile(schemaUrl, "utf8");
+
+  assert.match(schema, /export const masterRules = pgTable\("master_rules"/);
+  assert.match(schema, /export const masterCodes = pgTable\("master_codes"/);
+  assert.match(schema, /uniqueIndex\("master_rules_rule_code_unique"/);
+  assert.match(schema, /uniqueIndex\("master_codes_code_unique"/);
+});
+
 test("creates the database client only from the server DATABASE_URL environment variable", async () => {
   const dbModule = await readFile(dbUrl, "utf8");
 
@@ -55,6 +64,12 @@ test("records the generated migration as PostgreSQL metadata", async () => {
   const journal = JSON.parse(await readFile(journalUrl, "utf8"));
 
   assert.equal(journal.dialect, "postgresql");
+  for (let index = 1; index < journal.entries.length; index += 1) {
+    assert.ok(
+      journal.entries[index].when > journal.entries[index - 1].when,
+      `${journal.entries[index].tag} must have a later timestamp than ${journal.entries[index - 1].tag}`,
+    );
+  }
 });
 
 test("backfills display codes before enforcing their unique non-null constraints", async () => {

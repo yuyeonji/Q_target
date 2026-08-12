@@ -21,6 +21,42 @@ export type PersistedTarget = {
   sourceAlarmId?: string | null;
 };
 
+export type CreateTargetInput = {
+  targetCode?: string;
+  name: string;
+  status: string;
+  owner: string;
+  priority: string;
+  dueDate?: string | null;
+  sourceAlarmId?: string | null;
+};
+
+export type AlarmChanges = Partial<{ status: string; reviewer: string }>;
+
+export type PersistedMasterRule = {
+  id: string;
+  ruleCode: string;
+  kind: string;
+  name: string;
+  scope: string;
+  threshold: string;
+  active: boolean;
+};
+
+export type MasterRuleInput = Omit<PersistedMasterRule, "id">;
+export type MasterRuleChanges = Partial<Pick<MasterRuleInput, "name" | "scope" | "threshold" | "active">>;
+
+export type PersistedMasterCode = {
+  id: string;
+  code: string;
+  name: string;
+  category: string;
+  active: boolean;
+};
+
+export type MasterCodeInput = Omit<PersistedMasterCode, "id">;
+export type MasterCodeChanges = Partial<MasterCodeInput>;
+
 export type SampleDelayStage = {
   stageName: string;
   eventAt: string;
@@ -36,8 +72,33 @@ export type ActionPlanInput = {
   immediateAction?: string | null;
   preventiveAction?: string | null;
   status: string;
+  targetStatus?: string | null;
   tasks: Array<{ description: string; owner: string; dueDate?: string | null }>;
 };
+
+export type PersistedActionTask = {
+  id: string;
+  actionPlanId: string;
+  description: string;
+  owner: string;
+  dueDate?: string | null;
+  completedAt?: string | null;
+};
+
+export type PersistedActionPlan = {
+  id: string;
+  alarmId?: string | null;
+  targetId?: string | null;
+  rootCause?: string | null;
+  immediateAction?: string | null;
+  preventiveAction?: string | null;
+  status: string;
+  tasks: PersistedActionTask[];
+};
+
+export type ActionPlanRelation =
+  | { alarmId: string }
+  | { targetId: string };
 
 const safeError = "데이터를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.";
 
@@ -76,8 +137,53 @@ export async function listTargets() {
   return response.targets;
 }
 
+export async function listActionPlans(relation: ActionPlanRelation) {
+  const [key, value] = "alarmId" in relation
+    ? ["alarmId", relation.alarmId]
+    : ["targetId", relation.targetId];
+  const response = await request<{ actionPlans: PersistedActionPlan[] }>(
+    `/api/action-plans?${key}=${encodeURIComponent(value)}`,
+    { method: "GET" },
+  );
+  return response.actionPlans;
+}
+
+export async function createTarget(input: CreateTargetInput) {
+  return request<{ target: { id: string } }>("/api/targets", jsonRequest("POST", input));
+}
+
 export async function updateTarget(id: string, changes: Partial<Pick<PersistedTarget, "name" | "status" | "owner" | "priority">> & { dueDate?: string | null }) {
   return request<{ target: { id: string } }>(`/api/targets/${encodeURIComponent(id)}`, jsonRequest("PATCH", changes));
+}
+
+export async function updateAlarm(id: string, changes: AlarmChanges) {
+  return request<{ alarm: { id: string } }>(`/api/alarms/${encodeURIComponent(id)}`, jsonRequest("PATCH", changes));
+}
+
+export async function listMasterRules(kind: string) {
+  const response = await request<{ rules: PersistedMasterRule[] }>(`/api/master/rules?kind=${encodeURIComponent(kind)}`, { method: "GET" });
+  return response.rules;
+}
+
+export async function createMasterRule(input: MasterRuleInput) {
+  return request<{ rule: { id: string } }>("/api/master/rules", jsonRequest("POST", input));
+}
+
+export async function updateMasterRule(id: string, changes: MasterRuleChanges) {
+  return request<{ rule: { id: string } }>(`/api/master/rules/${encodeURIComponent(id)}`, jsonRequest("PATCH", changes));
+}
+
+export async function listMasterCodes() {
+  const response = await request<{ codes: PersistedMasterCode[] }>("/api/master/codes", { method: "GET" });
+  return response.codes;
+}
+
+export async function createMasterCode(input: MasterCodeInput) {
+  return request<{ code: { id: string } }>("/api/master/codes", jsonRequest("POST", input));
+}
+
+export async function updateMasterCode(id: string, changes: MasterCodeChanges) {
+  return request<{ code: { id: string } }>(`/api/master/codes/${encodeURIComponent(id)}`, jsonRequest("PATCH", changes));
 }
 
 export async function saveActionPlan(input: ActionPlanInput) {

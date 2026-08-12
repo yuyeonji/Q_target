@@ -86,6 +86,30 @@ export const sampleDelayStages = pgTable("sample_delay_stages", {
   ),
 ]);
 
+export const masterRules = pgTable("master_rules", {
+  id: id(),
+  ruleCode: text("rule_code").notNull(),
+  kind: text("kind").notNull(),
+  name: text("name").notNull(),
+  scope: text("scope").notNull(),
+  threshold: text("threshold").notNull(),
+  active: boolean("active").notNull().default(true),
+  createdAt: createdAt(),
+}, (table) => [
+  uniqueIndex("master_rules_rule_code_unique").on(table.ruleCode),
+]);
+
+export const masterCodes = pgTable("master_codes", {
+  id: id(),
+  code: text("code").notNull(),
+  name: text("name").notNull(),
+  category: text("category").notNull(),
+  active: boolean("active").notNull().default(true),
+  createdAt: createdAt(),
+}, (table) => [
+  uniqueIndex("master_codes_code_unique").on(table.code),
+]);
+
 export const auditEvents = pgTable("audit_events", {
   id: id(),
   occurredAt: timestamp("occurred_at", { withTimezone: true }).defaultNow().notNull(),

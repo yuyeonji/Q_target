@@ -9,3 +9,7 @@ type RouteContext = { params: Promise<{ id: string }> };
 export async function GET(request: Request, context: RouteContext) {
   return createAlarmDetailRouteHandlers(createQualityRepository(getWorkerDb(), schema)).GET(request, context);
 }
+
+export async function PATCH(request: Request, context: RouteContext) {
+  return createAlarmDetailRouteHandlers(createQualityRepository(getWorkerDb(), schema)).PATCH(request, context);
+}

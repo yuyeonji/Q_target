@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
+import ts from "typescript";
 
 const client = await import(`../lib/client-api.ts?test=${Date.now()}`);
 
@@ -14,6 +16,30 @@ function withFetch(response, run) {
   return Promise.resolve(run(calls)).finally(() => {
     globalThis.fetch = original;
   });
+}
+
+function typeDiagnostics(source) {
+  const virtualTestFile = fileURLToPath(new URL("./client-api-contract.test.ts", import.meta.url));
+  const isVirtualTestFile = (fileName) => ts.sys.resolvePath(fileName) === ts.sys.resolvePath(virtualTestFile);
+  const options = {
+    allowImportingTsExtensions: true,
+    module: ts.ModuleKind.ESNext,
+    moduleResolution: ts.ModuleResolutionKind.Bundler,
+    noEmit: true,
+    skipLibCheck: true,
+    strict: true,
+    target: ts.ScriptTarget.ESNext,
+  };
+  const host = ts.createCompilerHost(options);
+  const readFile = host.readFile.bind(host);
+  const fileExists = host.fileExists.bind(host);
+  const getSourceFile = host.getSourceFile.bind(host);
+  host.fileExists = (fileName) => isVirtualTestFile(fileName) || fileExists(fileName);
+  host.readFile = (fileName) => isVirtualTestFile(fileName) ? source : readFile(fileName);
+  host.getSourceFile = (fileName, languageVersion) => isVirtualTestFile(fileName)
+    ? ts.createSourceFile(fileName, source, languageVersion, true)
+    : getSourceFile(fileName, languageVersion);
+  return ts.getPreEmitDiagnostics(ts.createProgram([virtualTestFile], options, host));
 }
 
 test("list helpers request persisted alarm and target endpoints", async () => {
@@ -47,6 +73,86 @@ test("mutation helpers use JSON API contracts", async () => {
     await client.saveActionPlan({ status: "진행 중", tasks: [] });
     assert.equal(calls[0][0], "/api/action-plans");
     assert.equal(calls[0][1]?.method, "POST");
+  });
+});
+
+test("action-plan list helper restores persisted plans and tasks for one encoded relation", async () => {
+  const actionPlans = [{
+    id: "99198000-0000-4000-8000-000000000003",
+    targetId: "99198000-0000-4000-8000-000000000002",
+    rootCause: "인수인계 지연",
+    tasks: [{ id: "99198000-0000-4000-8000-000000000004", description: "원인 확인" }],
+  }];
+  await withFetch(new Response(JSON.stringify({ actionPlans }), { status: 200 }), async (calls) => {
+    assert.equal(typeof client.listActionPlans, "function");
+    assert.deepEqual(
+      await client.listActionPlans({ targetId: "99198000-0000-4000-8000-000000000002" }),
+      actionPlans,
+    );
+    assert.equal(calls[0][0], "/api/action-plans?targetId=99198000-0000-4000-8000-000000000002");
+    assert.equal(calls[0][1]?.method, "GET");
+  });
+});
+
+test("createTarget and updateAlarm send JSON to collection and encoded detail endpoints", async () => {
+  await withFetch(new Response(JSON.stringify({ target: { id: "T-2" } }), { status: 201 }), async (calls) => {
+    await client.createTarget({ name: "신규 항목", status: "대기", owner: "담당자 미지정", priority: "중간" });
+    assert.equal(calls[0][0], "/api/targets");
+    assert.equal(calls[0][1]?.method, "POST");
+    assert.equal(calls[0][1]?.body, JSON.stringify({ name: "신규 항목", status: "대기", owner: "담당자 미지정", priority: "중간" }));
+  });
+
+  await withFetch(new Response(JSON.stringify({ alarm: { id: "AL / 1" } }), { status: 200 }), async (calls) => {
+    await client.updateAlarm("AL / 1", { status: "종결", reviewer: "품질 검토팀" });
+    assert.equal(calls[0][0], "/api/alarms/AL%20%2F%201");
+    assert.equal(calls[0][1]?.method, "PATCH");
+    assert.equal(calls[0][1]?.body, JSON.stringify({ status: "종결", reviewer: "품질 검토팀" }));
+  });
+});
+
+test("updateAlarm's typed mutation contract rejects a null reviewer", () => {
+  const diagnostics = typeDiagnostics('import { updateAlarm } from "../lib/client-api.ts"; updateAlarm("alarm-1", { reviewer: null });');
+  assert.ok(
+    diagnostics.some((diagnostic) => ts.flattenDiagnosticMessageText(diagnostic.messageText, " ").includes("Type 'null' is not assignable")),
+    diagnostics.map((diagnostic) => ts.flattenDiagnosticMessageText(diagnostic.messageText, " ")).join("\n"),
+  );
+});
+
+test("master-rule helpers use a kind-filtered collection and encoded detail endpoint", async () => {
+  await withFetch(new Response(JSON.stringify({ rules: [{ id: "R-1", ruleCode: "ALR-001" }] }), { status: 200 }), async (calls) => {
+    assert.deepEqual(await client.listMasterRules("alarm rules"), [{ id: "R-1", ruleCode: "ALR-001" }]);
+    assert.equal(calls[0][0], "/api/master/rules?kind=alarm%20rules");
+  });
+
+  await withFetch(new Response(JSON.stringify({ rule: { id: "R-2" } }), { status: 201 }), async (calls) => {
+    await client.createMasterRule({ ruleCode: "ALR-004", kind: "alarm", name: "신규 규칙", scope: "전체", threshold: "1회", active: true });
+    assert.equal(calls[0][0], "/api/master/rules");
+    assert.equal(calls[0][1]?.method, "POST");
+  });
+
+  await withFetch(new Response(JSON.stringify({ rule: { id: "R / 2" } }), { status: 200 }), async (calls) => {
+    await client.updateMasterRule("R / 2", { active: false });
+    assert.equal(calls[0][0], "/api/master/rules/R%20%2F%202");
+    assert.equal(calls[0][1]?.method, "PATCH");
+  });
+});
+
+test("master-code helpers use collection and encoded detail endpoints", async () => {
+  await withFetch(new Response(JSON.stringify({ codes: [{ id: "C-1", code: "PRC-MCH" }] }), { status: 200 }), async (calls) => {
+    assert.deepEqual(await client.listMasterCodes(), [{ id: "C-1", code: "PRC-MCH" }]);
+    assert.equal(calls[0][0], "/api/master/codes");
+  });
+
+  await withFetch(new Response(JSON.stringify({ code: { id: "C-2" } }), { status: 201 }), async (calls) => {
+    await client.createMasterCode({ code: "PRC-ASM", name: "조립", category: "공정 코드", active: true });
+    assert.equal(calls[0][0], "/api/master/codes");
+    assert.equal(calls[0][1]?.method, "POST");
+  });
+
+  await withFetch(new Response(JSON.stringify({ code: { id: "C / 2" } }), { status: 200 }), async (calls) => {
+    await client.updateMasterCode("C / 2", { category: "공정 분류", active: false });
+    assert.equal(calls[0][0], "/api/master/codes/C%20%2F%202");
+    assert.equal(calls[0][1]?.method, "PATCH");
   });
 });
 

@@ -53,6 +53,13 @@ test("creates the database client only from the server DATABASE_URL environment 
   assert.doesNotMatch(dbModule, /postgresql:\/\//i);
 });
 
+test("accepts a quoted local DATABASE_URL without passing quotes to Neon", async () => {
+  const dbModule = await readFile(dbUrl, "utf8");
+
+  assert.match(dbModule, /export function normalizeDatabaseUrl/);
+  assert.match(dbModule, /replace\(\/\^"\|"\$\/g, ""\)/);
+});
+
 test("uses the Cloudflare DATABASE_URL binding for API requests", async () => {
   const workerDb = await readFile(workerDbUrl, "utf8");
 

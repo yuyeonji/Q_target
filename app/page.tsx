@@ -570,9 +570,9 @@ export default function Home() {
     setActionPlanAlarmId(target.sourceAlarmId ?? null);
     setPersistedActionPlan(null);
     setTasks([]);
-    setActionPlan(true);
     try {
       await reloadActionPlan({ targetId: target.id });
+      setActionPlan(true);
     } catch {
       showNotice("조치계획을 불러오지 못했습니다. 다시 시도해 주세요.");
       return;
@@ -831,7 +831,7 @@ export default function Home() {
           onAdd={addTask}
           onDelete={(id) => setTasks(tasks.filter((task) => task.id !== id))}
           onClose={() => setActionPlan(false)}
-          onSave={async ({ rootCause, immediateAction, preventiveAction }) => {
+          onSave={async ({ rootCause, immediateAction, preventiveAction, draftTask }) => {
             if (!persistenceReady) return;
             const targetId = selectedTarget?.id ?? null;
             const alarmId = actionPlanAlarmId;
@@ -840,6 +840,7 @@ export default function Home() {
               return;
             }
             try {
+              const tasksToSave = draftTask ? [...tasks, draftTask] : tasks;
               const actionPlanPayload = {
                 alarmId,
                 targetId,
@@ -848,7 +849,7 @@ export default function Home() {
                 immediateAction,
                 preventiveAction,
                 status: "진행 중",
-                tasks: tasks.map((task) => ({
+                tasks: tasksToSave.map((task) => ({
                   description: task.title,
                   owner: task.owner,
                   dueDate: task.due === "미정" ? null : task.due,
@@ -2661,6 +2662,7 @@ function ActionPlan({
     rootCause: string;
     immediateAction: string;
     preventiveAction: string;
+    draftTask: Omit<Task, "id"> | null;
   }) => void | Promise<void>;
   persistenceReady: boolean;
 }) {
@@ -2679,7 +2681,19 @@ function ActionPlan({
     void runSingleFlight(submittingRef, async () => {
       setSubmitting(true);
       try {
-        await onSave({ rootCause, immediateAction, preventiveAction });
+        await onSave({
+          rootCause,
+          immediateAction,
+          preventiveAction,
+          draftTask: newTask.trim()
+            ? {
+                title: newTask.trim(),
+                owner: taskOwner,
+                due: taskDue,
+                status: "대기중",
+              }
+            : null,
+        });
       } finally {
         setSubmitting(false);
       }

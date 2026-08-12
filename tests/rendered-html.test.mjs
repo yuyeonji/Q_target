@@ -54,7 +54,7 @@ test("maps persisted display codes while retaining UUID action IDs", async () =>
 test("persists every dashboard save action before reloading rendered data", async () => {
   const pageSource = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   const newCaseHandler = pageSource.match(/const createNewCase[\s\S]*?const openActionPlan/)?.[0] ?? "";
-  const actionPlanSave = pageSource.match(/onSave=\{async \(\{ rootCause, immediateAction, preventiveAction \}\) => \{[\s\S]*?\r?\n          }}\r?\n        \/>/)?.[0] ?? "";
+  const actionPlanSave = pageSource.match(/onSave=\{async \(\{ rootCause, immediateAction, preventiveAction(?:, draftTask)? \}\) => \{[\s\S]*?\r?\n          }}\r?\n        \/>/)?.[0] ?? "";
   const codeManagement = pageSource.match(/function CodeManagement\([\s\S]*?\r?\n}\r?\n\r?\nfunction MasterNote/)?.[0] ?? "";
   const ruleManagement = pageSource.match(/function RuleManagement\([\s\S]*?\r?\n}\r?\n\r?\nfunction Kpi/)?.[0] ?? "";
 
@@ -81,7 +81,7 @@ test("persists every dashboard save action before reloading rendered data", asyn
 test("persists controlled action-plan analysis values on successful save", async () => {
   const pageSource = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   const actionPlan = pageSource.match(/function ActionPlan\([\s\S]*?\r?\n}\r?\n\r?\nfunction QuickPanel/)?.[0] ?? "";
-  const actionPlanSave = pageSource.match(/onSave=\{async \(\{ rootCause, immediateAction, preventiveAction \}\) => \{[\s\S]*?\r?\n          }}\r?\n        \/>/)?.[0] ?? "";
+  const actionPlanSave = pageSource.match(/onSave=\{async \(\{ rootCause, immediateAction, preventiveAction(?:, draftTask)? \}\) => \{[\s\S]*?\r?\n          }}\r?\n        \/>/)?.[0] ?? "";
 
   assert.match(actionPlan, /const \[immediateAction, setImmediateAction\] = useState/);
   assert.match(actionPlan, /const \[rootCause, setRootCause\] = useState/);
@@ -95,7 +95,7 @@ test("persists controlled action-plan analysis values on successful save", async
 test("treats committed New Case and action-plan saves as successful when refresh fails", async () => {
   const pageSource = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   const newCaseHandler = pageSource.match(/const createNewCase[\s\S]*?const openActionPlan/)?.[0] ?? "";
-  const actionPlanSave = pageSource.match(/onSave=\{async \(\{ rootCause, immediateAction, preventiveAction \}\) => \{[\s\S]*?\r?\n          }}\r?\n        \/>/)?.[0] ?? "";
+  const actionPlanSave = pageSource.match(/onSave=\{async \(\{ rootCause, immediateAction, preventiveAction(?:, draftTask)? \}\) => \{[\s\S]*?\r?\n          }}\r?\n        \/>/)?.[0] ?? "";
 
   assert.match(newCaseHandler, /await createTarget\([\s\S]*?setNewCase\(false\)[\s\S]*?setView\("targets"\)[\s\S]*?try \{\s*await reloadPersistedData\(\)[\s\S]*?catch \{[\s\S]*?저장은 완료/);
   assert.match(actionPlanSave, /await saveActionPlan\([\s\S]*?targetStatus:\s*selectedTarget \? "진행 중" : null[\s\S]*?setActionPlan\(false\)[\s\S]*?try \{\s*await reloadPersistedData\(\)[\s\S]*?catch \{[\s\S]*?저장은 완료/);
@@ -117,7 +117,7 @@ test("restores persisted action-plan analysis and tasks for the selected UUID re
 test("keeps newly added action-plan tasks local until the approval save, then updates the current plan", async () => {
   const pageSource = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   const addTask = pageSource.match(/const addTask = \(\) => \{[\s\S]*?\n  \};/)?.[0] ?? "";
-  const actionPlanSave = pageSource.match(/onSave=\{async \(\{ rootCause, immediateAction, preventiveAction \}\) => \{[\s\S]*?\r?\n          }}\r?\n        \/>/)?.[0] ?? "";
+  const actionPlanSave = pageSource.match(/onSave=\{async \(\{ rootCause, immediateAction, preventiveAction(?:, draftTask)? \}\) => \{[\s\S]*?\r?\n          }}\r?\n        \/>/)?.[0] ?? "";
 
   assert.match(addTask, /setTasks\(/);
   assert.doesNotMatch(addTask, /saveActionPlan|updateActionPlan|fetch\(/);
@@ -403,4 +403,21 @@ test("uses Korean-first action-plan labels and clearly distinguished rule states
   assert.match(css, /\.rule-state-choice\.inactive\.selected\{[^}]*background:\s*#c52229[^}]*color:\s*#fff[^}]*\}/);
   assert.match(css, /\.rule-state-choice\{[^}]*border:\s*2px solid #[0-9a-f]{6}[^}]*\}/i);
   assert.match(css, /\.rule-state-choice:focus-visible\{[^}]*outline:\s*3px solid #[0-9a-f]{6}[^}]*\}/i);
+});
+
+test("opens a target action-plan popup only after loading its persisted plan", async () => {
+  const pageSource = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const openTargetActionPlan = pageSource.match(/const openTargetActionPlan = async \(target: Target\) => \{[\s\S]*?\n  \};/)?.[0] ?? "";
+
+  assert.match(
+    openTargetActionPlan,
+    /await reloadActionPlan\(\{ targetId: target\.id \}\);[\s\S]*?setActionPlan\(true\);/,
+  );
+});
+
+test("includes a typed draft task in the action-plan save payload", async () => {
+  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+
+  assert.match(page, /draftTask:[\s\S]*?newTask/);
+  assert.match(page, /\[\.\.\.tasks, draftTask\]/);
 });

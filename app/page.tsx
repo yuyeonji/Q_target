@@ -16,6 +16,7 @@ import {
   type PersistedActionPlan,
   type SampleDelayStage,
   updateAlarm,
+  updateActionPlan,
   updateMasterCode,
   updateMasterRule,
 } from "@/lib/client-api";
@@ -285,22 +286,7 @@ export default function Home() {
   const [newCase, setNewCase] = useState(false);
   const [masterTab, setMasterTab] = useState("알람 규칙");
   const [notice, setNotice] = useState("");
-  const [tasks, setTasks] = useState<Task[]>([
-    {
-      id: 1,
-      title: "압출기 3호기 모터 베어링 긴급 교체",
-      owner: "박설비 (기계팀)",
-      due: "11/20/2023",
-      status: "진행중",
-    },
-    {
-      id: 2,
-      title: "윤활유 라인 누유 지점 보수 및 전체 라인 점검",
-      owner: "이점검 (보전팀)",
-      due: "11/21/2023",
-      status: "대기중",
-    },
-  ]);
+  const [tasks, setTasks] = useState<Task[]>([]);
   const [newTask, setNewTask] = useState("");
   const [taskOwner, setTaskOwner] = useState("담당자 미지정");
   const [taskDue, setTaskDue] = useState("미정");
@@ -580,15 +566,17 @@ export default function Home() {
       showNotice("DB에서 다시 불러온 관리대상만 저장할 수 있습니다.");
       return;
     }
+    setSelectedTarget(target);
+    setActionPlanAlarmId(target.sourceAlarmId ?? null);
+    setPersistedActionPlan(null);
+    setTasks([]);
+    setActionPlan(true);
     try {
       await reloadActionPlan({ targetId: target.id });
     } catch {
       showNotice("조치계획을 불러오지 못했습니다. 다시 시도해 주세요.");
       return;
     }
-    setSelectedTarget(target);
-    setActionPlanAlarmId(target.sourceAlarmId ?? null);
-    setActionPlan(true);
   };
 
   return (
@@ -852,7 +840,7 @@ export default function Home() {
               return;
             }
             try {
-              await saveActionPlan({
+              const actionPlanPayload = {
                 alarmId,
                 targetId,
                 targetStatus: selectedTarget ? "진행 중" : null,
@@ -865,7 +853,15 @@ export default function Home() {
                   owner: task.owner,
                   dueDate: task.due === "미정" ? null : task.due,
                 })),
-              });
+              };
+              if (persistedActionPlan) {
+                await updateActionPlan(persistedActionPlan.id, actionPlanPayload);
+              } else {
+                await saveActionPlan({
+                  ...actionPlanPayload,
+                  targetStatus: selectedTarget ? "진행 중" : null,
+                });
+              }
             } catch {
               showNotice("조치계획 저장에 실패했습니다. 입력값은 유지됩니다. 다시 시도해 주세요.");
               return;

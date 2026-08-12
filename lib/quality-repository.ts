@@ -1,4 +1,4 @@
-import { asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 
 export type NewTarget = {
   targetCode: string;
@@ -61,6 +61,7 @@ export interface QualityRepository {
   createTargetWithAudit(input: NewTarget, audit: NewAuditEvent): Promise<{ id: string }>;
   updateTargetWithAudit(id: string, changes: TargetChanges, audit: NewAuditEvent): Promise<{ id: string } | null>;
   createActionPlanWithAudit(input: NewActionPlan, audit: NewAuditEvent): Promise<{ id: string }>;
+  updateActionPlanWithAudit(id: string, relation: ActionPlanRelation, input: NewActionPlan, audit: NewAuditEvent): Promise<{ id: string } | null>;
   createMasterRuleWithAudit(input: NewMasterRule, audit: NewAuditEvent): Promise<{ id: string }>;
   updateMasterRuleWithAudit(id: string, changes: MasterRuleChanges, audit: NewAuditEvent): Promise<{ id: string } | null>;
   createMasterCodeWithAudit(input: NewMasterCode, audit: NewAuditEvent): Promise<{ id: string }>;
@@ -160,6 +161,38 @@ export function createQualityRepository(database: unknown, tables: QualityTables
       ];
       await db.batch(statements);
       return { id };
+    },
+    async updateActionPlanWithAudit(id, relation, input, audit) {
+      const { tasks, targetStatus, ...plan } = input;
+      const relationColumn = "targetId" in relation ? tables.actionPlans.targetId : tables.actionPlans.alarmId;
+      const relationId = "targetId" in relation ? relation.targetId : relation.alarmId;
+      const planWhere = and(eq(tables.actionPlans.id, id), eq(relationColumn, relationId));
+      const statements = [
+        db.update(tables.actionPlans)
+          .set(plan)
+          .where(planWhere)
+          .returning({ id: tables.actionPlans.id }),
+        db.delete(tables.actionTasks).where(
+          sql`exists (select 1 from ${tables.actionPlans} where ${planWhere}) and ${eq(tables.actionTasks.actionPlanId, id)}`,
+        ),
+        ...(tasks?.length ? [
+          db.insert(tables.actionTasks).values(tasks.map((task) => ({ ...task, id: crypto.randomUUID(), actionPlanId: id }))),
+        ] : []),
+        ...(targetStatus && plan.targetId ? [
+          db.update(tables.targets).set({ status: targetStatus }).where(and(
+            eq(tables.targets.id, plan.targetId),
+            sql`exists (select 1 from ${tables.actionPlans} where ${planWhere})`,
+          )),
+          db.execute(sql`insert into ${tables.auditEvents} (id, event_type, entity_type, entity_id, details)
+            select ${crypto.randomUUID()}, ${"target.updated"}, ${"target"}, ${plan.targetId}, ${{ status: targetStatus }}
+            where exists (select 1 from ${tables.actionPlans} where ${planWhere})`),
+        ] : []),
+        db.execute(sql`insert into ${tables.auditEvents} (id, event_type, entity_type, entity_id, details)
+          select ${crypto.randomUUID()}, ${audit.eventType}, ${audit.entityType}, ${id}, ${audit.details ?? null}
+          where exists (select 1 from ${tables.actionPlans} where ${planWhere})`),
+      ];
+      const [updated] = await db.batch(statements);
+      return updated[0] ?? null;
     },
     async createMasterRuleWithAudit(input, audit) {
       const id = crypto.randomUUID();

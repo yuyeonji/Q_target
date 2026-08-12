@@ -189,3 +189,7 @@ export async function updateMasterCode(id: string, changes: MasterCodeChanges) {
 export async function saveActionPlan(input: ActionPlanInput) {
   return request<{ actionPlan: { id: string } }>("/api/action-plans", jsonRequest("POST", input));
 }
+
+export async function updateActionPlan(id: string, input: ActionPlanInput) {
+  return request<{ actionPlan: { id: string } }>(`/api/action-plans/${encodeURIComponent(id)}`, jsonRequest("PATCH", input));
+}

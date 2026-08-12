@@ -75,6 +75,16 @@ function createFakeRepository({ failAtomicMutation = false } = {}) {
       auditEvents.push(auditEvent);
       return saved;
     },
+    async updateActionPlanWithAudit(id, relation, actionPlan, auditEvent) {
+      if (failAtomicMutation) throw new Error("storage unavailable");
+      const saved = savedPlans.find((plan) => plan.id === id && (
+        "targetId" in relation ? plan.targetId === relation.targetId : plan.alarmId === relation.alarmId
+      ));
+      if (!saved) return null;
+      Object.assign(saved, actionPlan, { tasks: actionPlan.tasks });
+      auditEvents.push(auditEvent);
+      return { id };
+    },
     async updateAlarmWithAudit(id, changes, auditEvent) {
       alarmUpdateCalls += 1;
       if (failAtomicMutation) throw new Error("DATABASE_URL=postgresql://secret");
@@ -213,6 +223,28 @@ test("action-plan POST forwards a target status into the same atomic repository 
   assert.equal(repository.savedPlans.length, 1);
   assert.equal(repository.savedPlans[0].targetId, targetId);
   assert.equal(repository.savedPlans[0].targetStatus, "진행 중");
+});
+
+test("action-plan PATCH updates only the selected plan for its target", async () => {
+  const { createActionPlanDetailRouteHandlers } = await loadHandlers();
+  const repository = createFakeRepository();
+  repository.savedPlans.push({ id: actionPlanId, targetId, status: "open", tasks: [] });
+  const route = createActionPlanDetailRouteHandlers(repository);
+
+  const response = await route.PATCH(new Request(`http://app.local/api/action-plans/${actionPlanId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ targetId, status: "open", tasks: [{ description: "only-save-on-approval", owner: "owner" }] }),
+  }), { params: Promise.resolve({ id: actionPlanId }) });
+
+  assert.equal(response.status, 200);
+  assert.equal(repository.savedPlans[0].tasks[0].description, "only-save-on-approval");
+  assert.equal(repository.auditEvents.at(-1)?.eventType, "action-plan.updated");
+
+  const mismatch = await route.PATCH(new Request(`http://app.local/api/action-plans/${actionPlanId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ alarmId, status: "open", tasks: [] }),
+  }), { params: Promise.resolve({ id: actionPlanId }) });
+  assert.equal(mismatch.status, 404);
 });
 
 test("a failed atomic mutation leaves no partial target, action-plan, or audit data", async () => {

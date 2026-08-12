@@ -74,6 +74,12 @@ test("mutation helpers use JSON API contracts", async () => {
     assert.equal(calls[0][0], "/api/action-plans");
     assert.equal(calls[0][1]?.method, "POST");
   });
+
+  await withFetch(new Response(JSON.stringify({ actionPlan: { id: "P / 1" } }), { status: 200 }), async (calls) => {
+    await client.updateActionPlan("P / 1", { status: "open", tasks: [] });
+    assert.equal(calls[0][0], "/api/action-plans/P%20%2F%201");
+    assert.equal(calls[0][1]?.method, "PATCH");
+  });
 });
 
 test("action-plan list helper restores persisted plans and tasks for one encoded relation", async () => {

@@ -114,6 +114,18 @@ test("restores persisted action-plan analysis and tasks for the selected UUID re
   assert.match(pageSource, /initialPlan\?\.preventiveAction/);
 });
 
+test("keeps newly added action-plan tasks local until the approval save, then updates the current plan", async () => {
+  const pageSource = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const addTask = pageSource.match(/const addTask = \(\) => \{[\s\S]*?\n  \};/)?.[0] ?? "";
+  const actionPlanSave = pageSource.match(/onSave=\{async \(\{ rootCause, immediateAction, preventiveAction \}\) => \{[\s\S]*?\r?\n          }}\r?\n        \/>/)?.[0] ?? "";
+
+  assert.match(addTask, /setTasks\(/);
+  assert.doesNotMatch(addTask, /saveActionPlan|updateActionPlan|fetch\(/);
+  assert.match(actionPlanSave, /if \(persistedActionPlan\)[\s\S]*?await updateActionPlan\(persistedActionPlan\.id/);
+  assert.match(actionPlanSave, /else \{[\s\S]*?await saveActionPlan\(/);
+  assert.match(pageSource, /const \[tasks, setTasks\] = useState<Task\[\]>\(\[\]\)/);
+});
+
 test("uses committed-write refresh results for alarm, rule, and code updates", async () => {
   const pageSource = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   const alarmUpdates = pageSource.match(/const updateAlarmStatus[\s\S]*?const createNewCase/)?.[0] ?? "";

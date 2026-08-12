@@ -26,6 +26,7 @@ import {
   reconcileSelection,
   runSingleFlight,
 } from "@/lib/persistence-workflows";
+import type { DashboardResponse } from "@/lib/dashboard-types";
 
 type ViewId = "dashboard" | "alarms" | "targets" | "master";
 type AnalysisPanel = "trend" | "distribution" | null;
@@ -912,6 +913,30 @@ function Dashboard({
   onViewCriticalAlarms: () => void;
   onNavigate: (view: ViewId, filter: string) => void;
 }) {
+  const [dashboardData, setDashboardData] = useState<DashboardResponse | null>(null);
+  const [dashboardError, setDashboardError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams({
+      period: period.includes("7") ? "7d" : period.includes("30") ? "30d" : "quarter",
+      factory: factory.includes("전체") ? "all" : factory.includes("알파") ? "Alpha" : "Beta",
+      productType: product.includes("전체") ? "all" : product,
+    });
+    let active = true;
+    void fetch(`/api/dashboard?${params}`)
+      .then((response) => response.ok ? response.json() : Promise.reject(new Error("dashboard request failed")))
+      .then((data: DashboardResponse) => {
+        if (active) {
+          setDashboardData(data);
+          setDashboardError(null);
+        }
+      })
+      .catch(() => { if (active) setDashboardError("대시보드 데이터를 불러오지 못했습니다."); });
+    return () => { active = false; };
+  }, [period, factory, product]);
+
+  const trendMax = Math.max(...(dashboardData?.chartData.alertTrend.map((point) => point.count) ?? [1]));
+
   return (
     <div className="dashboard-view">
       <div className="page-head">
@@ -961,7 +986,7 @@ function Dashboard({
         >
           <Kpi
             title="전체 알람"
-            value={period === "최근 7일" ? "2,405" : "8,742"}
+            value={dashboardData ? dashboardData.kpi.totalAlerts.toLocaleString() : "-"}
             note="● 142 심각    ● 893 신규"
             trend="↗ +12%"
           />
@@ -972,7 +997,7 @@ function Dashboard({
         >
           <Kpi
             title="관리대상"
-            value={factory === "전체 공장" ? "84" : "28"}
+            value={dashboardData ? dashboardData.kpi.totalTargets.toLocaleString() : "-"}
             note="● 62 진행중    ● 12 기한 초과"
             trend="→ 0%"
           />
@@ -980,7 +1005,7 @@ function Dashboard({
         <article className="kpi-button">
           <Kpi
             title="조치 종결률"
-            value="92.4%"
+            value={dashboardData ? `${dashboardData.kpi.closureRate}%` : "-"}
             note="목표: 95%"
             trend="↗ +4.2%"
             progress
@@ -1005,16 +1030,9 @@ function Dashboard({
             aria-label="카테고리별 알람 추세 차트"
           >
             <div className="chart">
-              <span style={{ height: "40%" }} />
-              <span style={{ height: "65%" }} />
-              <span className="pink" style={{ height: "84%" }} />
-              <span style={{ height: "45%" }} />
-              <span style={{ height: "30%" }} />
-              <span style={{ height: "55%" }} />
-              <span style={{ height: "70%" }} />
-              <span style={{ height: "90%" }} />
-              <span style={{ height: "60%" }} />
-              <span style={{ height: "40%" }} />
+              {(dashboardData?.chartData.alertTrend ?? []).map((point, index) => (
+                <span key={point.date} className={index % 3 === 2 ? "pink" : undefined} style={{ height: `${Math.max(8, (point.count / trendMax) * 100)}%` }} />
+              ))}
             </div>
           </div>
           <p className="legend">● 샘플 지연 · ● 공정능력 · ● 트렌드 이탈</p>
@@ -1033,10 +1051,14 @@ function Dashboard({
           <div className="distribution-layout">
             <div className="donut">
               <strong>
-                84<small>전체</small>
+                {dashboardData?.kpi.totalTargets ?? "-"}<small>전체</small>
               </strong>
             </div>
             <div className="distribution distribution-legend">
+              {dashboardData?.chartData.targetDistribution.map((item) => (
+                <p key={item.status}><span className="distribution-dot normal" aria-hidden="true">●</span>{" "}{item.status} <b>{item.count}</b></p>
+              ))}
+              <div hidden={Boolean(dashboardData)}>
               <p>
                 <span className="distribution-dot normal" aria-hidden="true">
                   ●
@@ -1055,6 +1077,7 @@ function Dashboard({
                 </span>{" "}
                 기한 초과 <b>12 (15%)</b>
               </p>
+              </div>
             </div>
           </div>
         </article>
@@ -1075,7 +1098,15 @@ function Dashboard({
                 </tr>
               </thead>
               <tbody>
-                {[
+                {dashboardData ? dashboardData.alerts.map((alert) => (
+                  <tr key={alert.id}>
+                    <td>{alert.alarmCode}</td>
+                    <td>{alert.type}</td>
+                    <td>{`${alert.factory ?? ""} - ${alert.line}`}</td>
+                    <td>{alert.duration ?? "-"}</td>
+                    <td><Status>{alert.status}</Status></td>
+                  </tr>
+                )) : [
                   ["ALM-8492", "샘플 지연", "알파 - L1", "4h 12m"],
                   ["ALM-8490", "공정능력 위반", "베타 - L3", "2h 45m"],
                   ["ALM-8488", "트렌드 경고", "감마 - L2", "1h 10m"],
@@ -1096,6 +1127,15 @@ function Dashboard({
           </ScrollTable>
         </article>
         <article className="card overdue">
+          {dashboardData?.cases.map((item, index) => (
+            <div className="overdue-row" key={item.id}>
+              <small>{item.targetCode}</small>
+              <b>{item.name}</b>
+              <div><i style={{ width: `${Math.min(100, 65 + index * 10)}%` }} /></div>
+            </div>
+          ))}
+          {!dashboardData && !dashboardError && <p className="empty">대시보드 데이터를 불러오는 중입니다.</p>}
+          {dashboardError && <p className="empty">{dashboardError}</p>}
           <h3>⚠ 기한 초과 관리대상</h3>
           {["L1 불량률 감소", "자동 샘플링 도입", "3분기 공정 심사 준수"].map(
             (x, i) => (

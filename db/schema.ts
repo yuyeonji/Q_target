@@ -22,6 +22,8 @@ export const alarms = pgTable("alarms", {
   type: text("type").notNull(),
   process: text("process").notNull(),
   line: text("line").notNull(),
+  factory: text("factory"),
+  productType: text("product_type"),
   status: text("status").notNull(),
   reviewer: text("reviewer"),
   reviewDeadline: timestamp("review_deadline", { withTimezone: true }),

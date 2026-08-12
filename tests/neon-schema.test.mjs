@@ -9,6 +9,19 @@ const journalUrl = new URL("../drizzle/meta/_journal.json", import.meta.url);
 const displayCodeMigrationUrl = new URL("../drizzle/0003_persist_demo_identifiers.sql", import.meta.url);
 const d1RouteUrl = new URL("../examples/d1/app/api/notes/route.ts", import.meta.url);
 const d1DbUrl = new URL("../examples/d1/db/index.ts", import.meta.url);
+const seedUrl = new URL("../lib/seed.ts", import.meta.url);
+
+test("stores factory and product metadata on dashboard alarms", async () => {
+  const [schema, seed] = await Promise.all([
+    readFile(schemaUrl, "utf8"),
+    readFile(seedUrl, "utf8"),
+  ]);
+
+  assert.match(schema, /factory:\s*text\("factory"\)/);
+  assert.match(schema, /productType:\s*text\("product_type"\)/);
+  assert.match(seed, /factory:\s*"[^"]+"/);
+  assert.match(seed, /productType:\s*"Type [XY]"/);
+});
 
 test("exports the persistent quality tables and their parent relationships", async () => {
   const schema = await readFile(schemaUrl, "utf8");

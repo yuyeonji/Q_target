@@ -71,9 +71,10 @@ export type ActionPlanInput = {
   rootCause?: string | null;
   immediateAction?: string | null;
   preventiveAction?: string | null;
+  closureReason?: string | null;
   status: string;
   targetStatus?: string | null;
-  tasks: Array<{ description: string; owner: string; dueDate?: string | null }>;
+  tasks: Array<{ description: string; owner: string; dueDate?: string | null; completedAt?: string | null }>;
 };
 
 export type PersistedActionTask = {
@@ -92,6 +93,7 @@ export type PersistedActionPlan = {
   rootCause?: string | null;
   immediateAction?: string | null;
   preventiveAction?: string | null;
+  closureReason?: string | null;
   status: string;
   tasks: PersistedActionTask[];
 };

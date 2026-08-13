@@ -54,6 +54,7 @@ export const actionPlans = pgTable("action_plans", {
   rootCause: text("root_cause"),
   immediateAction: text("immediate_action"),
   preventiveAction: text("preventive_action"),
+  closureReason: text("closure_reason"),
   status: text("status").notNull(),
   createdAt: createdAt(),
 });

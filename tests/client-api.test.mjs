@@ -61,6 +61,13 @@ test("client records model persisted display codes", async () => {
   assert.match(source, /targetCode:\s*string/);
 });
 
+test("client action-plan contracts include closure reasons and completed tasks", async () => {
+  const clientSource = await readFile(new URL("../lib/client-api.ts", import.meta.url), "utf8");
+
+  assert.match(clientSource, /closureReason\?: string \| null/);
+  assert.match(clientSource, /completedAt\?: string \| null/);
+});
+
 test("mutation helpers use JSON API contracts", async () => {
   await withFetch(new Response(JSON.stringify({ target: { id: "T-1" } }), { status: 200 }), async (calls) => {
     await client.updateTarget("T-1", { status: "진행 중" });

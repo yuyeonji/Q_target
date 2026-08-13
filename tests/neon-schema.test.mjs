@@ -7,6 +7,7 @@ const dbUrl = new URL("../db/index.ts", import.meta.url);
 const workerDbUrl = new URL("../db/worker.ts", import.meta.url);
 const journalUrl = new URL("../drizzle/meta/_journal.json", import.meta.url);
 const displayCodeMigrationUrl = new URL("../drizzle/0003_persist_demo_identifiers.sql", import.meta.url);
+const actionPlanClosureMigrationUrl = new URL("../drizzle/0007_action_plan_closure.sql", import.meta.url);
 const d1RouteUrl = new URL("../examples/d1/app/api/notes/route.ts", import.meta.url);
 const d1DbUrl = new URL("../examples/d1/db/index.ts", import.meta.url);
 const seedUrl = new URL("../lib/seed.ts", import.meta.url);
@@ -48,6 +49,16 @@ test("persists stable display codes for alarms and management targets", async ()
   assert.match(schema, /targetCode:\s*text\("target_code"\)\.notNull\(\)/);
   assert.match(schema, /uniqueIndex\("alarms_alarm_code_unique"\)\.on\(table\.alarmCode\)/);
   assert.match(schema, /uniqueIndex\("targets_target_code_unique"\)\.on\(table\.targetCode\)/);
+});
+
+test("persists action-plan closure reasons through the schema migration", async () => {
+  const [schema, migration] = await Promise.all([
+    readFile(schemaUrl, "utf8"),
+    readFile(actionPlanClosureMigrationUrl, "utf8"),
+  ]);
+
+  assert.match(schema, /closureReason:\s*text\("closure_reason"\)/);
+  assert.match(migration, /ALTER TABLE "action_plans" ADD COLUMN "closure_reason" text;/);
 });
 
 test("defines unique tables for master rules and master codes", async () => {

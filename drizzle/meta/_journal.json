@@ -50,6 +50,13 @@
       "when": 1786510000001,
       "tag": "0006_target_source_alarm_unique",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1786600000000,
+      "tag": "0007_action_plan_closure",
+      "breakpoints": true
     }
   ]
 }

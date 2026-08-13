@@ -12,7 +12,7 @@ async function loadHandlers() {
   return import("../lib/route-handlers.mjs");
 }
 
-function createFakeRepository({ failAtomicMutation = false } = {}) {
+function createFakeRepository({ failAtomicMutation = false, findTargetBySourceAlarm = async () => null } = {}) {
   const auditEvents = [];
   const savedTargets = [];
   const savedPlans = [];
@@ -47,6 +47,7 @@ function createFakeRepository({ failAtomicMutation = false } = {}) {
     async listSampleDelayStages() { return sampleDelayStages; },
     async listTargets() { return savedTargets; },
     async findTarget(id) { return id === targetId ? { id } : savedTargets.find((target) => target.id === id) ?? null; },
+    findTargetBySourceAlarm,
     async listActionPlans(relation) {
       actionPlanListCalls.push(relation);
       return savedPlans.filter((plan) => relation.alarmId ? plan.alarmId === relation.alarmId : plan.targetId === relation.targetId);
@@ -245,6 +246,27 @@ test("action-plan PATCH updates only the selected plan for its target", async ()
     body: JSON.stringify({ alarmId, status: "open", tasks: [] }),
   }), { params: Promise.resolve({ id: actionPlanId }) });
   assert.equal(mismatch.status, 404);
+});
+
+test("target registration rejects an alarm that is already linked to a target", async () => {
+  const { createTargetRouteHandlers } = await loadHandlers();
+  const existingTarget = { id: targetId, targetCode: "TRG-00000001" };
+  const repository = createFakeRepository({
+    findTargetBySourceAlarm: async () => existingTarget,
+  });
+
+  const response = await createTargetRouteHandlers(repository).POST(new Request("http://app.local/api/targets", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name: "새 관리대상", status: "대기중", owner: "홍길동", priority: "높음", sourceAlarmId: alarmId }),
+  }));
+
+  assert.equal(response.status, 409);
+  assert.deepEqual(await response.json(), {
+    error: "이미 관리대상으로 등록된 알람입니다.",
+    target: existingTarget,
+  });
+  assert.equal(repository.savedTargets.length, 0);
 });
 
 test("a failed atomic mutation leaves no partial target, action-plan, or audit data", async () => {

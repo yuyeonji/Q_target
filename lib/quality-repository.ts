@@ -55,6 +55,7 @@ export interface QualityRepository {
   listSampleDelayStages(alarmId: string): Promise<unknown[]>;
   listTargets(): Promise<unknown[]>;
   findTarget(id: string): Promise<unknown | null>;
+  findTargetBySourceAlarm(sourceAlarmId: string): Promise<{ id: string; targetCode: string } | null>;
   listActionPlans(relation: ActionPlanRelation): Promise<Array<Record<string, unknown> & { tasks: unknown[] }>>;
   listMasterRules(kind: string): Promise<unknown[]>;
   listMasterCodes(): Promise<unknown[]>;
@@ -93,6 +94,13 @@ export function createQualityRepository(database: unknown, tables: QualityTables
     },
     async findTarget(id) {
       const [target] = await db.select().from(tables.targets).where(eq(tables.targets.id, id)).limit(1);
+      return target ?? null;
+    },
+    async findTargetBySourceAlarm(sourceAlarmId) {
+      const [target] = await db.select({ id: tables.targets.id, targetCode: tables.targets.targetCode })
+        .from(tables.targets)
+        .where(eq(tables.targets.sourceAlarmId, sourceAlarmId))
+        .limit(1);
       return target ?? null;
     },
     async listActionPlans(relation) {

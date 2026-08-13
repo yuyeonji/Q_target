@@ -44,6 +44,7 @@ export const targets = pgTable("targets", {
   createdAt: createdAt(),
 }, (table) => [
   uniqueIndex("targets_target_code_unique").on(table.targetCode),
+  uniqueIndex("targets_source_alarm_id_unique").on(table.sourceAlarmId),
 ]);
 
 export const actionPlans = pgTable("action_plans", {

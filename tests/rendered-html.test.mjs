@@ -152,6 +152,15 @@ test("ignores a stale action-plan reload after the user opens another target", a
   assert.match(reloadActionPlan, /if \(actionPlanRelationRef\.current !== relationKey\) return latest;/);
 });
 
+test("shows an action-plan loading state instead of another target's plan", async () => {
+  const pageSource = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const openTargetActionPlan = pageSource.match(/const openTargetActionPlan[\s\S]*?\n  \};/)?.[0] ?? "";
+
+  assert.match(pageSource, /const \[actionPlanLoading, setActionPlanLoading\] = useState\(false\)/);
+  assert.match(openTargetActionPlan, /setActionPlanLoading\(true\);[\s\S]*?finally[\s\S]*?setActionPlanLoading\(false\)/);
+  assert.match(pageSource, /actionPlanLoading \? \([\s\S]*?조치계획을 불러오는 중/);
+});
+
 test("keeps newly added action-plan tasks local until the approval save, then updates the current plan", async () => {
   const pageSource = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   const addTask = pageSource.match(/const addTask = \(\) => \{[\s\S]*?\n  \};/)?.[0] ?? "";

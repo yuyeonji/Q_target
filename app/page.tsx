@@ -318,6 +318,7 @@ export default function Home() {
   const [registrationSaving, setRegistrationSaving] = useState(false);
   const registrationSubmittingRef = useRef(false);
   const [actionPlan, setActionPlan] = useState(false);
+  const [actionPlanLoading, setActionPlanLoading] = useState(false);
   const [actionPlanAlarmId, setActionPlanAlarmId] = useState<string | null>(null);
   const [persistedActionPlan, setPersistedActionPlan] = useState<PersistedActionPlan | null>(null);
   const actionPlanRelationRef = useRef<string | null>(null);
@@ -614,11 +615,14 @@ export default function Home() {
     setActionPlanAlarmId(target.sourceAlarmId ?? null);
     setPersistedActionPlan(null);
     setTasks([]);
+    setActionPlanLoading(true);
     setActionPlan(true);
     try {
       await reloadActionPlan({ targetId: target.id });
     } catch {
       showNotice("저장된 조치계획을 불러오지 못했습니다. 새 조치계획을 작성할 수 있습니다.");
+    } finally {
+      if (actionPlanRelationRef.current === `target:${target.id}`) setActionPlanLoading(false);
     }
   };
 
@@ -874,6 +878,17 @@ export default function Home() {
         />
       )}
       {actionPlan && (
+        actionPlanLoading ? (
+          <div className="overlay modal-overlay">
+            <section className="modal" aria-busy="true">
+              <button aria-label="모달 닫기" className="close" onClick={() => setActionPlan(false)}>×</button>
+              <div className="modal-body">
+                <h2>원인분석 및 조치계획</h2>
+                <p role="status">조치계획을 불러오는 중입니다.</p>
+              </div>
+            </section>
+          </div>
+        ) : (
         <ActionPlan
           key={`${selectedTarget?.id ?? actionPlanAlarmId ?? "new"}:${persistedActionPlan?.id ?? "empty"}`}
           persistenceReady={persistenceReady}
@@ -989,6 +1004,7 @@ export default function Home() {
             }
           }}
         />
+        )
       )}
       {notice && (
         <div

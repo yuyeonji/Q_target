@@ -141,6 +141,17 @@ test("restores persisted action-plan analysis and tasks for the selected UUID re
   assert.match(pageSource, /initialPlan\?\.preventiveAction/);
 });
 
+test("ignores a stale action-plan reload after the user opens another target", async () => {
+  const pageSource = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const reloadActionPlan = pageSource.match(/const reloadActionPlan[\s\S]*?\n  \}, \[\]\);/)?.[0] ?? "";
+  const openTargetActionPlan = pageSource.match(/const openTargetActionPlan[\s\S]*?\n  \};/)?.[0] ?? "";
+
+  assert.match(pageSource, /const actionPlanRelationRef = useRef<string \| null>\(null\)/);
+  assert.match(openTargetActionPlan, /actionPlanRelationRef\.current = `target:\$\{target\.id\}`;/);
+  assert.match(reloadActionPlan, /const relationKey = "targetId" in relation \? `target:\$\{relation\.targetId\}` : `alarm:\$\{relation\.alarmId\}`;/);
+  assert.match(reloadActionPlan, /if \(actionPlanRelationRef\.current !== relationKey\) return latest;/);
+});
+
 test("keeps newly added action-plan tasks local until the approval save, then updates the current plan", async () => {
   const pageSource = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   const addTask = pageSource.match(/const addTask = \(\) => \{[\s\S]*?\n  \};/)?.[0] ?? "";

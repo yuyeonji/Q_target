@@ -161,6 +161,16 @@ test("shows an action-plan loading state instead of another target's plan", asyn
   assert.match(pageSource, /actionPlanLoading \? \([\s\S]*?조치계획을 불러오는 중/);
 });
 
+test("clears an unsaved task draft before opening another target's action plan", async () => {
+  const pageSource = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const openTargetActionPlan = pageSource.match(/const openTargetActionPlan[\s\S]*?\n  \};/)?.[0] ?? "";
+
+  assert.match(
+    openTargetActionPlan,
+    /setPersistedActionPlan\(null\);\s*setTasks\(\[\]\);\s*setNewTask\(""\);\s*setTaskOwner\("담당자 미지정"\);\s*setTaskDue\("미정"\);/,
+  );
+});
+
 test("keeps newly added action-plan tasks local until the approval save, then updates the current plan", async () => {
   const pageSource = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   const addTask = pageSource.match(/const addTask = \(\) => \{[\s\S]*?\n  \};/)?.[0] ?? "";

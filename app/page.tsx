@@ -615,6 +615,9 @@ export default function Home() {
     setActionPlanAlarmId(target.sourceAlarmId ?? null);
     setPersistedActionPlan(null);
     setTasks([]);
+    setNewTask("");
+    setTaskOwner("담당자 미지정");
+    setTaskDue("미정");
     setActionPlanLoading(true);
     setActionPlan(true);
     try {

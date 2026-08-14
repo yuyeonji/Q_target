@@ -12,12 +12,13 @@ async function loadHandlers() {
   return import("../lib/route-handlers.mjs");
 }
 
-function createFakeRepository({ failAtomicMutation = false } = {}) {
+function createFakeRepository({ failAtomicMutation = false, findTargetBySourceAlarm = async () => null } = {}) {
   const auditEvents = [];
   const savedTargets = [];
   const savedPlans = [];
   const savedRules = [];
   const savedCodes = [];
+  const closureCalls = [];
   let alarmUpdateCalls = 0;
   let targetUpdateCalls = 0;
   let masterRuleUpdateCalls = 0;
@@ -37,6 +38,7 @@ function createFakeRepository({ failAtomicMutation = false } = {}) {
     savedPlans,
     savedRules,
     savedCodes,
+    closureCalls,
     get alarmUpdateCalls() { return alarmUpdateCalls; },
     get targetUpdateCalls() { return targetUpdateCalls; },
     get masterRuleUpdateCalls() { return masterRuleUpdateCalls; },
@@ -47,6 +49,7 @@ function createFakeRepository({ failAtomicMutation = false } = {}) {
     async listSampleDelayStages() { return sampleDelayStages; },
     async listTargets() { return savedTargets; },
     async findTarget(id) { return id === targetId ? { id } : savedTargets.find((target) => target.id === id) ?? null; },
+    findTargetBySourceAlarm,
     async listActionPlans(relation) {
       actionPlanListCalls.push(relation);
       return savedPlans.filter((plan) => relation.alarmId ? plan.alarmId === relation.alarmId : plan.targetId === relation.targetId);
@@ -82,6 +85,15 @@ function createFakeRepository({ failAtomicMutation = false } = {}) {
       ));
       if (!saved) return null;
       Object.assign(saved, actionPlan, { tasks: actionPlan.tasks });
+      auditEvents.push(auditEvent);
+      return { id };
+    },
+    async closeActionPlanWithAudit(id, planTargetId, actionPlan, auditEvent) {
+      if (failAtomicMutation) throw new Error("storage unavailable");
+      const saved = savedPlans.find((plan) => plan.id === id && plan.targetId === planTargetId);
+      if (!saved) return null;
+      Object.assign(saved, actionPlan, { tasks: actionPlan.tasks });
+      closureCalls.push({ id, targetId: planTargetId, actionPlan, auditEvent });
       auditEvents.push(auditEvent);
       return { id };
     },
@@ -245,6 +257,105 @@ test("action-plan PATCH updates only the selected plan for its target", async ()
     body: JSON.stringify({ alarmId, status: "open", tasks: [] }),
   }), { params: Promise.resolve({ id: actionPlanId }) });
   assert.equal(mismatch.status, 404);
+});
+
+test("normal action-plan save and reload retain completed task timestamps", async () => {
+  const { createActionPlanRouteHandlers } = await loadHandlers();
+  const repository = createFakeRepository();
+  const route = createActionPlanRouteHandlers(repository);
+  const completedAt = "2026-08-13T00:00:00.000Z";
+
+  const saved = await route.POST(new Request("http://app.local/api/action-plans", {
+    method: "POST",
+    body: JSON.stringify({
+      status: "진행 중",
+      targetId,
+      tasks: [{ description: "완료 확인", owner: "홍길동", dueDate: "2026-08-13", completedAt }],
+    }),
+  }));
+  assert.equal(saved.status, 201);
+
+  const reloaded = await route.GET(new Request(`http://app.local/api/action-plans?targetId=${targetId}`));
+  assert.equal(reloaded.status, 200);
+  assert.equal((await reloaded.json()).actionPlans[0].tasks[0].completedAt, completedAt);
+});
+
+test("action-plan closure rejects missing analysis, reason, and completed task details", async () => {
+  const { createActionPlanCloseRouteHandlers } = await loadHandlers();
+  const repository = createFakeRepository();
+  repository.savedPlans.push({ id: actionPlanId, targetId, status: "진행 중", tasks: [] });
+  const route = createActionPlanCloseRouteHandlers(repository);
+  const valid = {
+    targetId,
+    rootCause: "원인 분석",
+    immediateAction: "즉시 조치",
+    preventiveAction: "재발 방지",
+    closureReason: "효과 확인 완료",
+    tasks: [{ description: "조치 확인", owner: "홍길동", dueDate: "2026-08-13", completedAt: "2026-08-13T00:00:00.000Z" }],
+  };
+
+  for (const body of [
+    { ...valid, rootCause: "" },
+    { ...valid, immediateAction: "" },
+    { ...valid, preventiveAction: "" },
+    { ...valid, closureReason: "" },
+    { ...valid, tasks: [] },
+    { ...valid, tasks: [{ ...valid.tasks[0], description: "" }] },
+    { ...valid, tasks: [{ ...valid.tasks[0], owner: "" }] },
+    { ...valid, tasks: [{ ...valid.tasks[0], dueDate: "" }] },
+    { ...valid, tasks: [{ ...valid.tasks[0], completedAt: "" }] },
+  ]) {
+    const response = await route.POST(new Request(`http://app.local/api/action-plans/${actionPlanId}/close`, {
+      method: "POST", body: JSON.stringify(body),
+    }), { params: Promise.resolve({ id: actionPlanId }) });
+    assert.equal(response.status, 400);
+  }
+  assert.deepEqual(repository.closureCalls, []);
+});
+
+test("action-plan closure persists complete tasks and server-enforced terminal statuses", async () => {
+  const { createActionPlanCloseRouteHandlers } = await loadHandlers();
+  const repository = createFakeRepository();
+  repository.savedPlans.push({ id: actionPlanId, targetId, status: "진행 중", tasks: [] });
+  const response = await createActionPlanCloseRouteHandlers(repository).POST(new Request(`http://app.local/api/action-plans/${actionPlanId}/close`, {
+    method: "POST",
+    body: JSON.stringify({
+      targetId,
+      rootCause: "원인 분석",
+      immediateAction: "즉시 조치",
+      preventiveAction: "재발 방지",
+      closureReason: "효과 확인 완료",
+      tasks: [{ description: "조치 확인", owner: "홍길동", dueDate: "2026-08-13", completedAt: "2026-08-13T00:00:00.000Z" }],
+    }),
+  }), { params: Promise.resolve({ id: actionPlanId }) });
+
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { actionPlan: { id: actionPlanId } });
+  assert.equal(repository.closureCalls[0].actionPlan.status, "종결");
+  assert.equal(repository.closureCalls[0].actionPlan.targetStatus, "완료");
+  assert.equal(repository.closureCalls[0].actionPlan.tasks[0].completedAt.toISOString(), "2026-08-13T00:00:00.000Z");
+  assert.equal(repository.closureCalls[0].auditEvent.eventType, "action-plan.closed");
+});
+
+test("target registration rejects an alarm that is already linked to a target", async () => {
+  const { createTargetRouteHandlers } = await loadHandlers();
+  const existingTarget = { id: targetId, targetCode: "TRG-00000001" };
+  const repository = createFakeRepository({
+    findTargetBySourceAlarm: async () => existingTarget,
+  });
+
+  const response = await createTargetRouteHandlers(repository).POST(new Request("http://app.local/api/targets", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ name: "새 관리대상", status: "대기중", owner: "홍길동", priority: "높음", sourceAlarmId: alarmId }),
+  }));
+
+  assert.equal(response.status, 409);
+  assert.deepEqual(await response.json(), {
+    error: "이미 관리대상으로 등록된 알람입니다.",
+    target: existingTarget,
+  });
+  assert.equal(repository.savedTargets.length, 0);
 });
 
 test("a failed atomic mutation leaves no partial target, action-plan, or audit data", async () => {
@@ -483,7 +594,12 @@ test("repository executes awaited Neon HTTP batches for target and action-plan m
         set(changes) {
           return {
             where() {
-              return { returning() { return { kind: "update", table, changes }; } };
+              return {
+                kind: "update",
+                table,
+                changes,
+                returning() { return { kind: "update", table, changes }; },
+              };
             },
           };
         },
@@ -504,12 +620,15 @@ test("repository executes awaited Neon HTTP batches for target and action-plan m
 
   let targetResolved = false;
   const targetPromise = repository.createTargetWithAudit(
-    { name: "관리대상", status: "대기", owner: "홍길동", priority: "높음" },
+    { name: "관리대상", status: "진행 중", owner: "홍길동", priority: "높음", sourceAlarmId: alarmId },
     { eventType: "target.created", entityType: "target" },
   ).then((result) => { targetResolved = true; return result; });
   await new Promise((resolve) => setTimeout(resolve, 0));
   assert.equal(batchCalls.length, 1);
-  assert.equal(batchCalls[0].length, 2);
+  assert.equal(batchCalls[0].length, 3);
+  assert.equal(batchCalls[0][1].kind, "update");
+  assert.equal(batchCalls[0][1].table, tables.alarms);
+  assert.deepEqual(batchCalls[0][1].changes, { status: "관리대상" });
   assert.equal(targetResolved, false);
   releaseTargetBatch();
   const created = await targetPromise;
@@ -531,6 +650,68 @@ test("repository executes awaited Neon HTTP batches for target and action-plan m
   assert.equal(batchCalls[3][0].kind, "update");
   assert.equal(batchCalls[3][0].table, tables.targets);
   assert.deepEqual(batchCalls[3][0].changes, { status: "진행 중" });
+});
+
+test("repository closes a matching action plan in one guarded Neon batch", async () => {
+  const { createQualityRepository } = await import("../lib/quality-repository.ts");
+  const batchCalls = [];
+  const fakeDb = {
+    insert(table) {
+      return { values(values) { return { kind: "insert", table, values }; } };
+    },
+    update(table) {
+      return {
+        set(changes) {
+          return {
+            where() {
+              return {
+                kind: "update", table, changes,
+                returning() { return { kind: "update", table, changes }; },
+              };
+            },
+          };
+        },
+      };
+    },
+    delete(table) {
+      return { where() { return { kind: "delete", table }; } };
+    },
+    execute(statement) { return { kind: "execute", statement }; },
+    async batch(statements) {
+      batchCalls.push(statements);
+      return [[{ id: actionPlanId }], [], [], [], [], [], [], []];
+    },
+    transaction() { throw new Error("interactive transaction must not run"); },
+  };
+  const tables = await import("../db/schema.ts");
+  const repository = createQualityRepository(fakeDb, tables);
+  const closed = await repository.closeActionPlanWithAudit(actionPlanId, targetId, {
+    rootCause: "원인 분석",
+    immediateAction: "즉시 조치",
+    preventiveAction: "재발 방지",
+    closureReason: "효과 확인 완료",
+    status: "종결",
+    targetStatus: "완료",
+    tasks: [{ description: "조치 확인", owner: "홍길동", dueDate: new Date("2026-08-13"), completedAt: new Date("2026-08-13T00:00:00Z") }],
+  }, { eventType: "action-plan.closed", entityType: "action-plan" });
+
+  assert.deepEqual(closed, { id: actionPlanId });
+  assert.equal(batchCalls.length, 1);
+  assert.equal(batchCalls[0].length, 8);
+  assert.equal(batchCalls[0][0].table, tables.actionPlans);
+  assert.deepEqual(batchCalls[0][0].changes, {
+    rootCause: "원인 분석",
+    immediateAction: "즉시 조치",
+    preventiveAction: "재발 방지",
+    closureReason: "효과 확인 완료",
+    status: "종결",
+  });
+  assert.equal(batchCalls[0][1].kind, "delete");
+  assert.equal(batchCalls[0][3].table, tables.targets);
+  assert.deepEqual(batchCalls[0][3].changes, { status: "완료" });
+  assert.equal(batchCalls[0][4].table, tables.alarms);
+  assert.deepEqual(batchCalls[0][4].changes, { status: "종결" });
+  assert.ok(batchCalls[0].slice(5).every((statement) => statement.kind === "execute"));
 });
 
 test("repository lists action plans with their tasks for the selected relation", async () => {

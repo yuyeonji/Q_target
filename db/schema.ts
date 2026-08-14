@@ -22,6 +22,8 @@ export const alarms = pgTable("alarms", {
   type: text("type").notNull(),
   process: text("process").notNull(),
   line: text("line").notNull(),
+  factory: text("factory"),
+  productType: text("product_type"),
   status: text("status").notNull(),
   reviewer: text("reviewer"),
   reviewDeadline: timestamp("review_deadline", { withTimezone: true }),
@@ -42,6 +44,7 @@ export const targets = pgTable("targets", {
   createdAt: createdAt(),
 }, (table) => [
   uniqueIndex("targets_target_code_unique").on(table.targetCode),
+  uniqueIndex("targets_source_alarm_id_unique").on(table.sourceAlarmId),
 ]);
 
 export const actionPlans = pgTable("action_plans", {
@@ -51,6 +54,7 @@ export const actionPlans = pgTable("action_plans", {
   rootCause: text("root_cause"),
   immediateAction: text("immediate_action"),
   preventiveAction: text("preventive_action"),
+  closureReason: text("closure_reason"),
   status: text("status").notNull(),
   createdAt: createdAt(),
 });

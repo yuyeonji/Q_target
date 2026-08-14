@@ -61,6 +61,13 @@ test("client records model persisted display codes", async () => {
   assert.match(source, /targetCode:\s*string/);
 });
 
+test("client action-plan contracts include closure reasons and completed tasks", async () => {
+  const clientSource = await readFile(new URL("../lib/client-api.ts", import.meta.url), "utf8");
+
+  assert.match(clientSource, /closureReason\?: string \| null/);
+  assert.match(clientSource, /completedAt\?: string \| null/);
+});
+
 test("mutation helpers use JSON API contracts", async () => {
   await withFetch(new Response(JSON.stringify({ target: { id: "T-1" } }), { status: 200 }), async (calls) => {
     await client.updateTarget("T-1", { status: "진행 중" });
@@ -113,6 +120,41 @@ test("createTarget and updateAlarm send JSON to collection and encoded detail en
     assert.equal(calls[0][0], "/api/alarms/AL%20%2F%201");
     assert.equal(calls[0][1]?.method, "PATCH");
     assert.equal(calls[0][1]?.body, JSON.stringify({ status: "종결", reviewer: "품질 검토팀" }));
+  });
+});
+
+test("closeActionPlan posts an encoded terminal action-plan payload", async () => {
+  const closure = {
+    targetId: "99198000-0000-4000-8000-000000000002",
+    rootCause: "원인 분석을 완료했습니다.",
+    immediateAction: "즉시 조치를 완료했습니다.",
+    preventiveAction: "재발 방지 조치를 완료했습니다.",
+    closureReason: "효과 확인 근거를 검토했습니다.",
+    status: "종결",
+    targetStatus: "완료",
+    tasks: [{ description: "조치 확인", owner: "홍길동", dueDate: "2026-08-13", completedAt: "2026-08-13T00:00:00.000Z" }],
+  };
+  await withFetch(new Response(JSON.stringify({ actionPlan: { id: "P / 1" } }), { status: 200 }), async (calls) => {
+    assert.deepEqual(await client.closeActionPlan("P / 1", closure), { id: "P / 1" });
+    assert.equal(calls[0][0], "/api/action-plans/P%20%2F%201/close");
+    assert.equal(calls[0][1]?.method, "POST");
+    assert.equal(calls[0][1]?.body, JSON.stringify(closure));
+  });
+});
+
+test("HTTP failures retain safe text and expose the response status", async () => {
+  await withFetch(new Response(JSON.stringify({ error: "conflict detail" }), { status: 409 }), async () => {
+    await assert.rejects(client.createTarget({
+      name: "신규 항목",
+      status: "대기",
+      owner: "미지정",
+      priority: "보통",
+    }), (error) => {
+      assert.equal(error.status, 409);
+      assert.match(error.message, /불러오지 못했습니다/);
+      assert.doesNotMatch(error.message, /conflict detail/);
+      return true;
+    });
   });
 });
 

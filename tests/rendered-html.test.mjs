@@ -497,6 +497,15 @@ test("keeps non-action-plan validation visible only after submission", async () 
   assert.match(newCase, /<ValidationSummary/);
 });
 
+test("keeps New Case validation state out of the action-plan save handler", async () => {
+  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const newCase = page.match(/function NewCase[\s\S]*?\r?\n}\r?\n\r?\nfunction ActionPlan/)?.[0] ?? "";
+  const actionPlan = page.match(/function ActionPlan\([\s\S]*?\r?\n}\r?\n\r?\nfunction QuickPanel/)?.[0] ?? "";
+
+  assert.match(newCase, /setAttempted\(true\);\s*if \(!name\.trim\(\)\) return;/);
+  assert.doesNotMatch(actionPlan, /setAttempted\(|!name\.trim\(\)/);
+});
+
 test("renders closed action plans as read-only and accepts concise real closure analyses", async () => {
   const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   const actionPlan = page.match(/function ActionPlan\([\s\S]*?\r?\n}\r?\n\r?\nfunction QuickPanel/)?.[0] ?? "";

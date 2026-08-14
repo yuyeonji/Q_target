@@ -2809,6 +2809,8 @@ function NewCase({
   const nameInputRef = useRef<HTMLInputElement>(null);
 
   const submit = () => {
+    setAttempted(true);
+    if (!name.trim()) return;
     void runSingleFlight(submittingRef, async () => {
       setSubmitting(true);
       try {
@@ -2964,8 +2966,6 @@ function ActionPlan({
   ].filter((error): error is string => Boolean(error)) : [];
   const closeBlockingErrors = closeErrors.filter((error) => error !== "종결 판단 사유를 입력하세요.");
   const submit = () => {
-    setAttempted(true);
-    if (!name.trim()) return;
     void runSingleFlight(submittingRef, async () => {
       setSaveAttempted(true);
       setSubmitting(true);

@@ -44,6 +44,33 @@ test("includes interactive demo controls in the client page", async () => {
   assert.match(source, /신규 케이스 등록/);
 });
 
+test("registers an alarm as a target without entering the action-plan flow", async () => {
+  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const alarmDetails = page.match(/\{alarm &&[\s\S]*?\{actionPlan &&/)?.[0] ?? "";
+  const registrationHandler = page.match(/const submitTargetRegistration = async \(\) => \{[\s\S]*?\n {2}\};/)?.[0] ?? "";
+
+  assert.match(alarmDetails, /onAction=\{\(\) => void openTargetRegistration\(\)\}/);
+  assert.doesNotMatch(alarmDetails, /onAction=\{\(\) => void openActionPlan\(\)\}/);
+  assert.match(page, /function TargetRegistrationDialog\(/);
+  assert.match(registrationHandler, /sourceAlarmId:\s*selectedRegistrationAlarm\.id/);
+  assert.match(registrationHandler, /dueDate:\s*registrationDueDate \? registrationDueDate : null/);
+  assert.doesNotMatch(registrationHandler, /updateAlarm\(|reloadActionPlan\(|saveActionPlan\(|updateActionPlan\(|setActionPlan\(/);
+});
+
+test("removes registered alarms from history without a registration status control", async () => {
+  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const registrationHandler = page.match(/const submitTargetRegistration = async \(\) => \{[\s\S]*?\n {2}\};/)?.[0] ?? "";
+  const dialog = page.match(/function TargetRegistrationDialog\([\s\S]*?\r?\n}\r?\n\r?\nfunction NewCase/)?.[0] ?? "";
+  const alarmList = page.match(/function AlarmList\([\s\S]*?\r?\n}\r?\n\r?\nfunction TargetList/)?.[0] ?? "";
+
+  assert.match(page, /type AlarmStatus = "신규" \| "검토중" \| "심각" \| "관리대상" \| "종결"/);
+  assert.match(registrationHandler, /status:\s*"진행 중"/);
+  assert.doesNotMatch(registrationHandler, /registrationStatus/);
+  assert.doesNotMatch(dialog, /onStatusChange|<label>\s*상태/);
+  assert.doesNotMatch(alarmList, /<option>관리대상<\/option>/);
+  assert.match(page, /item\.status !== "관리대상"/);
+});
+
 test("maps persisted display codes while retaining UUID action IDs", async () => {
   const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   assert.match(page, /code:\s*item\.alarmCode/);
@@ -53,7 +80,7 @@ test("maps persisted display codes while retaining UUID action IDs", async () =>
 
 test("persists every dashboard save action before reloading rendered data", async () => {
   const pageSource = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
-  const newCaseHandler = pageSource.match(/const createNewCase[\s\S]*?const openActionPlan/)?.[0] ?? "";
+  const newCaseHandler = pageSource.match(/const createNewCase[\s\S]*?const openTargetRegistration/)?.[0] ?? "";
   const actionPlanSave = pageSource.match(/onSave=\{async \(\{ rootCause, immediateAction, preventiveAction(?:, draftTask)? \}\) => \{[\s\S]*?\r?\n          }}\r?\n        \/>/)?.[0] ?? "";
   const codeManagement = pageSource.match(/function CodeManagement\([\s\S]*?\r?\n}\r?\n\r?\nfunction MasterNote/)?.[0] ?? "";
   const ruleManagement = pageSource.match(/function RuleManagement\([\s\S]*?\r?\n}\r?\n\r?\nfunction Kpi/)?.[0] ?? "";
@@ -94,7 +121,7 @@ test("persists controlled action-plan analysis values on successful save", async
 
 test("treats committed New Case and action-plan saves as successful when refresh fails", async () => {
   const pageSource = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
-  const newCaseHandler = pageSource.match(/const createNewCase[\s\S]*?const openActionPlan/)?.[0] ?? "";
+  const newCaseHandler = pageSource.match(/const createNewCase[\s\S]*?const openTargetRegistration/)?.[0] ?? "";
   const actionPlanSave = pageSource.match(/onSave=\{async \(\{ rootCause, immediateAction, preventiveAction(?:, draftTask)? \}\) => \{[\s\S]*?\r?\n          }}\r?\n        \/>/)?.[0] ?? "";
 
   assert.match(newCaseHandler, /await createTarget\([\s\S]*?setNewCase\(false\)[\s\S]*?setView\("targets"\)[\s\S]*?try \{\s*await reloadPersistedData\(\)[\s\S]*?catch \{[\s\S]*?저장은 완료/);
@@ -149,7 +176,7 @@ test("guards New Case and Action Plan against concurrent duplicate submissions",
   assert.match(newCase, /disabled=\{!persistenceReady \|\| submitting\}/);
   assert.match(actionPlan, /runSingleFlight/);
   assert.match(actionPlan, /submittingRef/);
-  assert.match(actionPlan, /disabled=\{!persistenceReady \|\| submitting\}/);
+  assert.match(actionPlan, /disabled=\{!persistenceReady \|\| submitting \|\| isClosed\}/);
 });
 
 test("treats committed rule and code creates as successful when refresh fails", async () => {
@@ -193,7 +220,7 @@ test("disables every persisted mutation control until UUID-backed data is ready"
   assert.match(ruleManagement, /persistenceReady: boolean/);
   assert.match(ruleManagement, /disabled=\{!persistenceReady\}/);
   assert.match(actionPlan, /persistenceReady: boolean/);
-  assert.match(actionPlan, /disabled=\{!persistenceReady \|\| submitting\}/);
+  assert.match(actionPlan, /disabled=\{!persistenceReady \|\| submitting \|\| isClosed\}/);
 });
 
 test("includes complete demo control surfaces", async () => {
@@ -405,13 +432,13 @@ test("uses Korean-first action-plan labels and clearly distinguished rule states
   assert.match(css, /\.rule-state-choice:focus-visible\{[^}]*outline:\s*3px solid #[0-9a-f]{6}[^}]*\}/i);
 });
 
-test("opens a target action-plan popup only after loading its persisted plan", async () => {
+test("opens a target action-plan popup even when loading its persisted plan fails", async () => {
   const pageSource = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   const openTargetActionPlan = pageSource.match(/const openTargetActionPlan = async \(target: Target\) => \{[\s\S]*?\n  \};/)?.[0] ?? "";
 
   assert.match(
     openTargetActionPlan,
-    /await reloadActionPlan\(\{ targetId: target\.id \}\);[\s\S]*?setActionPlan\(true\);/,
+    /setActionPlan\(true\);[\s\S]*?await reloadActionPlan\(\{ targetId: target\.id \}\);/,
   );
 });
 
@@ -420,4 +447,65 @@ test("includes a typed draft task in the action-plan save payload", async () => 
 
   assert.match(page, /draftTask:[\s\S]*?newTask/);
   assert.match(page, /\[\.\.\.tasks, draftTask\]/);
+});
+
+test("action plans expose a Korean validated close flow with completed task controls", async () => {
+  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const actionPlan = page.match(/function ActionPlan\([\s\S]*?\r?\n}\r?\n\r?\nfunction QuickPanel/)?.[0] ?? "";
+
+  assert.match(page, /closeActionPlan/);
+  assert.match(actionPlan, /onToggleComplete/);
+  assert.match(actionPlan, /종결 처리/);
+  assert.match(actionPlan, /조치 결과\s*\/\s*효과 확인 근거\s*\/\s*종결 판단 사유/);
+  assert.match(actionPlan, /type="checkbox"/);
+});
+
+test("renders typed visible feedback primitives", async () => {
+  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+
+  assert.match(page, /type FeedbackTone = "success" \| "error" \| "info"/);
+  assert.match(page, /function ValidationSummary\(/);
+  assert.match(page, /function FieldError\(/);
+  assert.match(page, /role="alert"/);
+  assert.match(css, /\.feedback-banner\.error\{/);
+  assert.match(css, /\.field-error\{/);
+  assert.match(css, /\.field-invalid\{/);
+});
+
+test("shows action-plan errors only after save or close is attempted", async () => {
+  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const actionPlan = page.match(/function ActionPlan\([\s\S]*?\r?\n}\r?\n\r?\nfunction QuickPanel/)?.[0] ?? "";
+
+  assert.match(actionPlan, /const \[saveAttempted, setSaveAttempted\] = useState\(false\)/);
+  assert.match(actionPlan, /const \[closeAttempted, setCloseAttempted\] = useState\(false\)/);
+  assert.match(actionPlan, /<ValidationSummary errors=\{closeErrors\}/);
+  assert.match(actionPlan, /className=\{immediateActionError \? "field-invalid" : undefined\}/);
+  assert.match(actionPlan, /<FieldError message=\{immediateActionError\}/);
+  assert.match(actionPlan, /setSaveAttempted\(true\)/);
+  assert.match(actionPlan, /setCloseAttempted\(true\)/);
+});
+
+test("keeps non-action-plan validation visible only after submission", async () => {
+  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const newCase = page.match(/function NewCase[\s\S]*?\r?\n}\r?\n\r?\nfunction ActionPlan/)?.[0] ?? "";
+  const codes = page.match(/function CodeManagement[\s\S]*?\r?\n}\r?\n\r?\nfunction MasterNote/)?.[0] ?? "";
+  const rules = page.match(/function RuleManagement[\s\S]*?\r?\n}\r?\n\r?\nfunction Kpi/)?.[0] ?? "";
+
+  assert.match(codes, /<FieldError/);
+  assert.match(rules, /<FieldError/);
+  assert.match(newCase, /<ValidationSummary/);
+});
+
+test("renders closed action plans as read-only and accepts concise real closure analyses", async () => {
+  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const actionPlan = page.match(/function ActionPlan\([\s\S]*?\r?\n}\r?\n\r?\nfunction QuickPanel/)?.[0] ?? "";
+
+  assert.match(actionPlan, /const isClosed = initialPlan\?\.status === "종결"/);
+  assert.match(actionPlan, /종결된 조치계획은 읽기 전용입니다/);
+  assert.match(actionPlan, /disabled=\{isClosed/);
+  assert.match(actionPlan, /isMeaningful\(rootCause\)/);
+  assert.match(actionPlan, /isMeaningful\(immediateAction\)/);
+  assert.match(actionPlan, /isMeaningful\(preventiveAction\)/);
+  assert.doesNotMatch(actionPlan, /trim\(\)\.length < 10/);
 });

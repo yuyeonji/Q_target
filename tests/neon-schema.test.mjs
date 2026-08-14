@@ -11,6 +11,25 @@ const actionPlanClosureMigrationUrl = new URL("../drizzle/0007_action_plan_closu
 const d1RouteUrl = new URL("../examples/d1/app/api/notes/route.ts", import.meta.url);
 const d1DbUrl = new URL("../examples/d1/db/index.ts", import.meta.url);
 const seedUrl = new URL("../lib/seed.ts", import.meta.url);
+const apiRootUrl = new URL("../app/api/", import.meta.url);
+
+test("production API routes use the Node-compatible Neon database helper", async () => {
+  const { readdir, readFile: readRoute } = await import("node:fs/promises");
+  const routeFiles = [];
+  async function collectRoutes(directory) {
+    for (const entry of await readdir(directory, { withFileTypes: true })) {
+      const path = new URL(`${entry.name}${entry.isDirectory() ? "/" : ""}`, directory);
+      if (entry.isDirectory()) await collectRoutes(path);
+      if (entry.isFile() && entry.name === "route.ts") routeFiles.push(path);
+    }
+  }
+  await collectRoutes(apiRootUrl);
+  const routeSources = await Promise.all(routeFiles.map((file) => readRoute(file, "utf8")));
+  assert.ok(routeSources.length > 0);
+  for (const source of routeSources) {
+    assert.doesNotMatch(source, /@\/db\/worker|getWorkerDb|cloudflare:workers/);
+  }
+});
 
 test("stores factory and product metadata on dashboard alarms", async () => {
   const [schema, seed] = await Promise.all([
@@ -61,6 +80,12 @@ test("persists action-plan closure reasons through the schema migration", async 
   assert.match(migration, /ALTER TABLE "action_plans" ADD COLUMN "closure_reason" text;/);
 });
 
+test("keeps one managed target per linked alarm", async () => {
+  const schema = await readFile(schemaUrl, "utf8");
+
+  assert.match(schema, /uniqueIndex\("targets_source_alarm_id_unique"\)\.on\(table\.sourceAlarmId\)/);
+});
+
 test("defines unique tables for master rules and master codes", async () => {
   const schema = await readFile(schemaUrl, "utf8");
 
@@ -84,7 +109,7 @@ test("accepts a quoted local DATABASE_URL without passing quotes to Neon", async
   assert.match(dbModule, /replace\(\/\^"\|"\$\/g, ""\)/);
 });
 
-test("uses the Cloudflare DATABASE_URL binding for API requests", async () => {
+test("keeps the legacy Cloudflare adapter isolated from production API routes", async () => {
   const workerDb = await readFile(workerDbUrl, "utf8");
 
   assert.match(workerDb, /from "cloudflare:workers"/);

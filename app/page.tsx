@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  ApiError,
+  closeActionPlan,
   createMasterCode,
   createMasterRule,
   createTarget,
@@ -30,7 +32,9 @@ import type { DashboardResponse } from "@/lib/dashboard-types";
 
 type ViewId = "dashboard" | "alarms" | "targets" | "master";
 type AnalysisPanel = "trend" | "distribution" | null;
-type AlarmStatus = "신규" | "검토중" | "심각" | "종결";
+type FeedbackTone = "success" | "error" | "info";
+type Feedback = { message: string; tone: FeedbackTone };
+type AlarmStatus = "신규" | "검토중" | "심각" | "관리대상" | "종결";
 type Alarm = {
   id: string;
   code?: string;
@@ -48,6 +52,7 @@ type Task = {
   owner: string;
   due: string;
   status: string;
+  completed: boolean;
 };
 type Target = {
   id: string;
@@ -237,6 +242,17 @@ const initialCodes: MasterCode[] = [
   },
 ];
 
+const actionPlanAnalysisDefaults = [
+  "발생한 현상을 객관적인 사실 기반으로 상세히 기술하세요.",
+  "5Why 분석을 통한 근본 원인을 기술하세요.",
+  "재발 방지를 위한 예방 조치를 기술하세요.",
+];
+
+const isMeaningful = (value: string) => {
+  const trimmed = value.trim();
+  return Boolean(trimmed) && !actionPlanAnalysisDefaults.includes(trimmed);
+};
+
 function Status({ children }: { children: string }) {
   const kind =
     children === "심각"
@@ -264,6 +280,20 @@ function MiniBars({ critical = false }: { critical?: boolean }) {
   );
 }
 
+function FieldError({ message }: { message?: string }) {
+  return message ? <p className="field-error" role="alert">{message}</p> : null;
+}
+
+function ValidationSummary({ errors, title }: { errors: string[]; title: string }) {
+  if (!errors.length) return null;
+  return (
+    <section className="validation-summary" role="alert" aria-live="assertive">
+      <strong>{title}</strong>
+      <ul>{errors.map((error) => <li key={error}>{error}</li>)}</ul>
+    </section>
+  );
+}
+
 export default function Home() {
   const [view, setView] = useState<ViewId>("dashboard");
   const [analysisPanel, setAnalysisPanel] = useState<AnalysisPanel>(null);
@@ -281,12 +311,18 @@ export default function Home() {
   const [compact, setCompact] = useState(false);
   const [selectedTarget, setSelectedTarget] = useState<Target | null>(null);
   const [alarm, setAlarm] = useState<Alarm | null>(null);
+  const [selectedRegistrationAlarm, setSelectedRegistrationAlarm] = useState<Alarm | null>(null);
+  const [registrationOwner, setRegistrationOwner] = useState("미지정");
+  const [registrationPriority, setRegistrationPriority] = useState("보통");
+  const [registrationDueDate, setRegistrationDueDate] = useState("");
+  const [registrationSaving, setRegistrationSaving] = useState(false);
+  const registrationSubmittingRef = useRef(false);
   const [actionPlan, setActionPlan] = useState(false);
   const [actionPlanAlarmId, setActionPlanAlarmId] = useState<string | null>(null);
   const [persistedActionPlan, setPersistedActionPlan] = useState<PersistedActionPlan | null>(null);
   const [newCase, setNewCase] = useState(false);
   const [masterTab, setMasterTab] = useState("알람 규칙");
-  const [notice, setNotice] = useState("");
+  const [notice, setNotice] = useState<Feedback | null>(null);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [newTask, setNewTask] = useState("");
   const [taskOwner, setTaskOwner] = useState("담당자 미지정");
@@ -386,6 +422,7 @@ export default function Home() {
         owner: task.owner,
         due: task.dueDate ? task.dueDate.slice(0, 10) : "미정",
         status: task.completedAt ? "완료" : "대기중",
+        completed: Boolean(task.completedAt),
       })) ?? [],
     );
     return latest;
@@ -415,6 +452,7 @@ export default function Home() {
     () =>
       alarmItems.filter(
         (item) =>
+          item.status !== "관리대상" &&
           `${item.item} ${item.code ?? item.id} ${item.type}`
             .toLowerCase()
             .includes(search.toLowerCase()) &&
@@ -433,9 +471,9 @@ export default function Home() {
       ),
     [search, targetFilter, targetItems],
   );
-  const showNotice = (message: string) => {
-    setNotice(message);
-    window.setTimeout(() => setNotice(""), 2200);
+  const showNotice = (message: string, tone: FeedbackTone = "info") => {
+    setNotice({ message, tone });
+    window.setTimeout(() => setNotice(null), 2200);
   };
   const addTask = () => {
     if (!newTask.trim()) return showNotice("새 과제명을 입력해 주세요.");
@@ -447,6 +485,7 @@ export default function Home() {
         owner: taskOwner,
         due: taskDue,
         status: "대기중",
+        completed: false,
       },
     ]);
     setNewTask("");
@@ -517,49 +556,49 @@ export default function Home() {
       showNotice("관리대상 저장은 완료되었습니다. 최신 데이터를 불러오지 못했습니다. 다시 시도 버튼으로 새로고침하세요.");
     }
   };
-  const openActionPlan = async () => {
-    if (!persistenceReady) return;
-    if (!alarm) return;
+  const openTargetRegistration = () => {
+    if (!persistenceReady || !alarm) return;
     if (!isUuid(alarm.id)) {
       showNotice("DB에서 다시 불러온 알람만 저장할 수 있습니다.");
       return;
     }
-    const selectedAlarm = alarm;
-    const relatedTarget = targetItems.find((target) => target.sourceAlarmId === selectedAlarm.id) ?? null;
-    if (relatedTarget && !isUuid(relatedTarget.id)) {
-      showNotice("DB에서 다시 불러온 관리대상만 저장할 수 있습니다.");
-      return;
-    }
-    let result;
-    try {
-      result = await persistThenRefresh(
-        () => updateAlarm(selectedAlarm.id, {
-          status: "검토중",
-          reviewer: "품질 검토팀",
-        }),
-        reloadPersistedData,
-      );
-    } catch {
-      showNotice("저장에 실패했습니다. 이전 상태는 유지됩니다. 다시 시도해 주세요.");
-      return;
-    }
-    setAlarm(null);
-    try {
-      await reloadActionPlan(
-        relatedTarget ? { targetId: relatedTarget.id } : { alarmId: selectedAlarm.id },
-      );
-    } catch {
-      setPersistedActionPlan(null);
-      setTasks([]);
-      showNotice("알람 상태 저장은 완료되었지만 조치계획을 불러오지 못했습니다. 다시 시도해 주세요.");
-      return;
-    }
-    setSelectedTarget(relatedTarget);
-    setActionPlanAlarmId(selectedAlarm.id);
-    setActionPlan(true);
-    if (!result.refreshed) {
-      showNotice("알람 상태 저장은 완료되었습니다. 최신 목록을 불러오지 못했습니다. 다시 시도 버튼으로 새로고침하세요.");
-    }
+    setRegistrationOwner("미지정");
+    setRegistrationPriority("보통");
+    setRegistrationDueDate("");
+    setSelectedRegistrationAlarm(alarm);
+  };
+  const submitTargetRegistration = async () => {
+    await runSingleFlight(registrationSubmittingRef, async () => {
+      if (!persistenceReady || !selectedRegistrationAlarm) return;
+      setRegistrationSaving(true);
+      try {
+        await createTarget({
+          name: selectedRegistrationAlarm.item,
+          sourceAlarmId: selectedRegistrationAlarm.id,
+          status: "진행 중",
+          owner: registrationOwner,
+          priority: registrationPriority,
+          dueDate: registrationDueDate ? registrationDueDate : null,
+        });
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 409) {
+          showNotice("이미 관리대상으로 등록된 알람입니다.");
+        } else {
+          showNotice("저장에 실패했습니다. 입력값은 유지됩니다. 다시 시도해 주세요.");
+        }
+        return;
+      } finally {
+        setRegistrationSaving(false);
+      }
+      setSelectedRegistrationAlarm(null);
+      setAlarm(null);
+      try {
+        await reloadPersistedData();
+      } catch {
+        // The target was committed even if the follow-up refresh failed.
+      }
+      showNotice("관리대상으로 등록되었습니다. 관리대상 이력에서 계속 관리할 수 있습니다.");
+    });
   };
   const openTargetActionPlan = async (target: Target) => {
     if (!persistenceReady) return;
@@ -571,12 +610,11 @@ export default function Home() {
     setActionPlanAlarmId(target.sourceAlarmId ?? null);
     setPersistedActionPlan(null);
     setTasks([]);
+    setActionPlan(true);
     try {
       await reloadActionPlan({ targetId: target.id });
-      setActionPlan(true);
     } catch {
-      showNotice("조치계획을 불러오지 못했습니다. 다시 시도해 주세요.");
-      return;
+      showNotice("저장된 조치계획을 불러오지 못했습니다. 새 조치계획을 작성할 수 있습니다.");
     }
   };
 
@@ -800,7 +838,7 @@ export default function Home() {
             onMonitor={() =>
               void updateAlarmStatus("검토중", "알람을 모니터링 상태로 전환했습니다.")
             }
-            onAction={() => void openActionPlan()}
+            onAction={() => void openTargetRegistration()}
           />
         ) : (
           <AlarmDrawer
@@ -813,9 +851,24 @@ export default function Home() {
             onMonitor={() =>
               void updateAlarmStatus("검토중", "알람을 모니터링 상태로 전환했습니다.")
             }
-            onAction={() => void openActionPlan()}
+            onAction={() => void openTargetRegistration()}
           />
         ))}
+      {selectedRegistrationAlarm && (
+        <TargetRegistrationDialog
+          alarm={selectedRegistrationAlarm}
+          owner={registrationOwner}
+          priority={registrationPriority}
+          dueDate={registrationDueDate}
+          saving={registrationSaving}
+          persistenceReady={persistenceReady}
+          onOwnerChange={setRegistrationOwner}
+          onPriorityChange={setRegistrationPriority}
+          onDueDateChange={setRegistrationDueDate}
+          onClose={() => setSelectedRegistrationAlarm(null)}
+          onRegister={() => void submitTargetRegistration()}
+        />
+      )}
       {actionPlan && (
         <ActionPlan
           key={`${selectedTarget?.id ?? actionPlanAlarmId ?? "new"}:${persistedActionPlan?.id ?? "empty"}`}
@@ -831,9 +884,18 @@ export default function Home() {
           setTaskDue={setTaskDue}
           onAdd={addTask}
           onDelete={(id) => setTasks(tasks.filter((task) => task.id !== id))}
+          onToggleComplete={(id) => setTasks((current) => current.map((task) =>
+            task.id === id
+              ? { ...task, completed: !task.completed, status: task.completed ? "대기중" : "완료" }
+              : task,
+          ))}
           onClose={() => setActionPlan(false)}
           onSave={async ({ rootCause, immediateAction, preventiveAction, draftTask }) => {
             if (!persistenceReady) return;
+            if (persistedActionPlan?.status === "종결") {
+              showNotice("종결된 조치계획은 읽기 전용입니다. 재개할 수 없습니다.");
+              return;
+            }
             const targetId = selectedTarget?.id ?? null;
             const alarmId = actionPlanAlarmId;
             if ((targetId && !isUuid(targetId)) || (alarmId && !isUuid(alarmId)) || (!targetId && !alarmId)) {
@@ -854,6 +916,7 @@ export default function Home() {
                   description: task.title,
                   owner: task.owner,
                   dueDate: task.due === "미정" ? null : task.due,
+                  completedAt: task.completed ? new Date().toISOString() : null,
                 })),
               };
               if (persistedActionPlan) {
@@ -881,11 +944,56 @@ export default function Home() {
               showNotice("조치계획 저장은 완료되었습니다. 최신 데이터를 불러오지 못했습니다. 다시 시도 버튼으로 새로고침하세요.");
             }
           }}
+          onClosePlan={async ({ rootCause, immediateAction, preventiveAction, closureReason }) => {
+            const targetId = selectedTarget?.id ?? null;
+            if (persistedActionPlan?.status === "종결") {
+              showNotice("종결된 조치계획은 읽기 전용입니다. 재개할 수 없습니다.");
+              return;
+            }
+            if (!persistenceReady || !persistedActionPlan || !targetId || !isUuid(targetId)) {
+              showNotice("저장되지 않은 조치계획은 종결할 수 없습니다. 먼저 저장해 주세요.");
+              return;
+            }
+            try {
+              await closeActionPlan(persistedActionPlan.id, {
+                alarmId: actionPlanAlarmId,
+                targetId,
+                rootCause,
+                immediateAction,
+                preventiveAction,
+                closureReason,
+                status: "종결",
+                targetStatus: "완료",
+                tasks: tasks.map((task) => ({
+                  description: task.title,
+                  owner: task.owner,
+                  dueDate: task.due === "미정" ? null : task.due,
+                  completedAt: task.completed ? new Date().toISOString() : null,
+                })),
+              });
+            } catch {
+              showNotice("조치계획 종결에 실패했습니다. 입력값은 유지됩니다. 다시 시도해 주세요.");
+              return;
+            }
+            setActionPlan(false);
+            try {
+              await reloadPersistedData();
+              await reloadActionPlan({ targetId });
+              showNotice("관리대상과 조치계획을 종결했습니다.");
+            } catch {
+              showNotice("관리대상과 조치계획을 종결했습니다. 최신 데이터를 불러오지 못했습니다. 다시 시도 버튼으로 새로고침하세요.");
+            }
+          }}
         />
       )}
       {notice && (
-        <div className="toast" role="status">
-          ✓ {notice}
+        <div
+          className={`feedback-banner ${notice.tone}`}
+          role={notice.tone === "error" ? "alert" : "status"}
+          aria-live="polite"
+        >
+          <span>{notice.tone === "success" ? "✓" : notice.tone === "error" ? "!" : "i"}</span>
+          {notice.message}
         </div>
       )}
     </main>
@@ -1498,14 +1606,20 @@ function CodeManagement({
   showNotice: (message: string) => void;
 }) {
   const [draft, setDraft] = useState({ code: "", name: "", category: "" });
+  const [draftAttempted, setDraftAttempted] = useState(false);
   const [editing, setEditing] = useState<MasterCode | null>(null);
+  const draftErrors = draftAttempted ? [
+    !draft.code.trim() ? "코드값을 입력해 주세요." : null,
+    !draft.name.trim() ? "코드명을 입력해 주세요." : null,
+    !draft.category.trim() ? "코드 분류를 입력해 주세요." : null,
+  ].filter((error): error is string => Boolean(error)) : [];
   const updateDraft = (field: keyof typeof draft, value: string) =>
     setDraft({ ...draft, [field]: value });
   const addCode = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!persistenceReady) return;
-    if (!draft.code.trim() || !draft.name.trim() || !draft.category.trim())
-      return showNotice("코드값, 코드명, 코드 분류를 모두 입력해 주세요.");
+    setDraftAttempted(true);
+    if (!draft.code.trim() || !draft.name.trim() || !draft.category.trim()) return;
     try {
       await createMasterCode({
         code: draft.code.trim().toUpperCase(),
@@ -1518,6 +1632,7 @@ function CodeManagement({
       return;
     }
     setDraft({ code: "", name: "", category: "" });
+    setDraftAttempted(false);
     try {
       await reloadPersistedData();
       showNotice("새 코드를 추가했습니다.");
@@ -1599,35 +1714,42 @@ function CodeManagement({
         </button>
       </div>
       <form className="master-create code-create" onSubmit={addCode}>
+        <ValidationSummary errors={draftErrors} title="코드를 추가하려면 다음 항목을 입력하세요." />
         <label>
           코드값
           <input
             aria-label="새 코드값"
             value={draft.code}
+            className={draftAttempted && !draft.code.trim() ? "field-invalid" : undefined}
             disabled={!persistenceReady}
             onChange={(event) => updateDraft("code", event.target.value)}
             placeholder="예: PRC-MCH"
           />
+          <FieldError message={draftAttempted && !draft.code.trim() ? "코드값을 입력해 주세요." : undefined} />
         </label>
         <label>
           코드명
           <input
             aria-label="새 코드명"
             value={draft.name}
+            className={draftAttempted && !draft.name.trim() ? "field-invalid" : undefined}
             disabled={!persistenceReady}
             onChange={(event) => updateDraft("name", event.target.value)}
             placeholder="코드명 입력"
           />
+          <FieldError message={draftAttempted && !draft.name.trim() ? "코드명을 입력해 주세요." : undefined} />
         </label>
         <label>
           코드 분류
           <input
             aria-label="새 코드 분류"
             value={draft.category}
+            className={draftAttempted && !draft.category.trim() ? "field-invalid" : undefined}
             disabled={!persistenceReady}
             onChange={(event) => updateDraft("category", event.target.value)}
             placeholder="분류 입력"
           />
+          <FieldError message={draftAttempted && !draft.category.trim() ? "코드 분류를 입력해 주세요." : undefined} />
         </label>
         <button className="black" type="submit" disabled={!persistenceReady}>
           ＋ 새 코드 추가
@@ -1788,14 +1910,20 @@ function RuleManagement({
   showNotice: (message: string) => void;
 }) {
   const [draft, setDraft] = useState({ name: "", scope: "", threshold: "" });
+  const [draftAttempted, setDraftAttempted] = useState(false);
   const [editing, setEditing] = useState<Rule | null>(null);
+  const draftErrors = draftAttempted ? [
+    !draft.name.trim() ? "규칙명을 입력해 주세요." : null,
+    !draft.scope.trim() ? "적용 범위를 입력해 주세요." : null,
+    !draft.threshold.trim() ? "임계값을 입력해 주세요." : null,
+  ].filter((error): error is string => Boolean(error)) : [];
   const updateDraft = (field: keyof typeof draft, value: string) =>
     setDraft({ ...draft, [field]: value });
   const addRule = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!persistenceReady) return;
-    if (!draft.name.trim() || !draft.scope.trim() || !draft.threshold.trim())
-      return showNotice("규칙명, 적용 범위, 임계값을 모두 입력해 주세요.");
+    setDraftAttempted(true);
+    if (!draft.name.trim() || !draft.scope.trim() || !draft.threshold.trim()) return;
     const nextNumber =
       Math.max(0, ...rules.map((rule) => Number((rule.code ?? rule.id).split("-")[1]) || 0)) +
       1;
@@ -1813,6 +1941,7 @@ function RuleManagement({
       return;
     }
     setDraft({ name: "", scope: "", threshold: "" });
+    setDraftAttempted(false);
     try {
       await reloadPersistedData();
       showNotice(`${title}에 새 규칙을 추가했습니다.`);
@@ -1894,35 +2023,42 @@ function RuleManagement({
         </button>
       </div>
       <form className="master-create rule-create" onSubmit={addRule}>
+        <ValidationSummary errors={draftErrors} title="규칙을 추가하려면 다음 항목을 입력하세요." />
         <label>
           규칙명
           <input
             aria-label="새 규칙명"
             value={draft.name}
+            className={draftAttempted && !draft.name.trim() ? "field-invalid" : undefined}
             disabled={!persistenceReady}
             onChange={(event) => updateDraft("name", event.target.value)}
             placeholder="규칙명 입력"
           />
+          <FieldError message={draftAttempted && !draft.name.trim() ? "규칙명을 입력해 주세요." : undefined} />
         </label>
         <label>
           {scopeLabel}
           <input
             aria-label={`새 ${scopeLabel}`}
             value={draft.scope}
+            className={draftAttempted && !draft.scope.trim() ? "field-invalid" : undefined}
             disabled={!persistenceReady}
             onChange={(event) => updateDraft("scope", event.target.value)}
             placeholder="적용 범위 입력"
           />
+          <FieldError message={draftAttempted && !draft.scope.trim() ? "적용 범위를 입력해 주세요." : undefined} />
         </label>
         <label>
           {thresholdLabel}
           <input
             aria-label={`새 ${thresholdLabel}`}
             value={draft.threshold}
+            className={draftAttempted && !draft.threshold.trim() ? "field-invalid" : undefined}
             disabled={!persistenceReady}
             onChange={(event) => updateDraft("threshold", event.target.value)}
             placeholder="임계값 입력"
           />
+          <FieldError message={draftAttempted && !draft.threshold.trim() ? "임계값을 입력해 주세요." : undefined} />
         </label>
         <button className="black" type="submit" disabled={!persistenceReady}>
           ＋ 새 규칙 추가
@@ -2596,6 +2732,66 @@ function SampleDelayDrawer({
   );
 }
 
+function TargetRegistrationDialog({
+  alarm,
+  owner,
+  priority,
+  dueDate,
+  saving,
+  persistenceReady,
+  onOwnerChange,
+  onPriorityChange,
+  onDueDateChange,
+  onClose,
+  onRegister,
+}: {
+  alarm: Alarm;
+  owner: string;
+  priority: string;
+  dueDate: string;
+  saving: boolean;
+  persistenceReady: boolean;
+  onOwnerChange: (value: string) => void;
+  onPriorityChange: (value: string) => void;
+  onDueDateChange: (value: string) => void;
+  onClose: () => void;
+  onRegister: () => void;
+}) {
+  return (
+    <div className="overlay modal-overlay">
+      <section className="case-modal" role="dialog" aria-modal="true" aria-labelledby="target-registration-title">
+        <button aria-label="등록 팝업 닫기" className="close" disabled={saving} onClick={onClose}>
+          ×
+        </button>
+        <h2 id="target-registration-title">관리대상 등록</h2>
+        <p>{alarm.item} 알람을 지속 관리할 대상으로 등록합니다.</p>
+        <label>
+          담당자
+          <input value={owner} disabled={saving} onChange={(event) => onOwnerChange(event.target.value)} />
+        </label>
+        <label>
+          우선순위
+          <select value={priority} disabled={saving} onChange={(event) => onPriorityChange(event.target.value)}>
+            <option>보통</option>
+            <option>높음</option>
+            <option>긴급</option>
+          </select>
+        </label>
+        <label>
+          마감일
+          <input type="date" value={dueDate} disabled={saving} onChange={(event) => onDueDateChange(event.target.value)} />
+        </label>
+        <footer>
+          <button disabled={saving} onClick={onClose}>취소</button>
+          <button className="black" disabled={!persistenceReady || saving} onClick={onRegister}>
+            {saving ? "등록 중…" : "등록"}
+          </button>
+        </footer>
+      </section>
+    </div>
+  );
+}
+
 function NewCase({
   onClose,
   onCreate,
@@ -2607,6 +2803,7 @@ function NewCase({
 }) {
   const [name, setName] = useState("");
   const [priority, setPriority] = useState("중간");
+  const [attempted, setAttempted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const submittingRef = useRef(false);
   const nameInputRef = useRef<HTMLInputElement>(null);
@@ -2630,6 +2827,10 @@ function NewCase({
   return (
     <div className="overlay modal-overlay">
       <section className="case-modal">
+        <ValidationSummary
+          errors={attempted && !name.trim() ? ["관리항목명을 입력해 주세요."] : []}
+          title="등록 전에 다음 항목을 확인하세요."
+        />
         <button aria-label="모달 닫기" className="close" onClick={onClose}>
           ×
         </button>
@@ -2640,9 +2841,15 @@ function NewCase({
           <input
             ref={nameInputRef}
             value={name}
+            className={attempted && !name.trim() ? "field-invalid" : undefined}
+            aria-invalid={attempted && !name.trim()}
+            aria-describedby={attempted && !name.trim() ? "new-case-name-error" : undefined}
             onChange={(e) => setName(e.target.value)}
             placeholder="예: 설비 진동 기준 초과"
           />
+          {attempted && !name.trim() && (
+            <span id="new-case-name-error"><FieldError message="관리항목명을 입력해 주세요." /></span>
+          )}
         </label>
         <label>
           우선순위
@@ -2682,8 +2889,10 @@ function ActionPlan({
   setTaskDue,
   onAdd,
   onDelete,
+  onToggleComplete,
   onClose,
   onSave,
+  onClosePlan,
   persistenceReady,
 }: {
   initialPlan: PersistedActionPlan | null;
@@ -2697,12 +2906,19 @@ function ActionPlan({
   setTaskDue: (s: string) => void;
   onAdd: () => void;
   onDelete: (id: number | string) => void;
+  onToggleComplete: (id: number | string) => void;
   onClose: () => void;
   onSave: (analysis: {
     rootCause: string;
     immediateAction: string;
     preventiveAction: string;
     draftTask: Omit<Task, "id"> | null;
+  }) => void | Promise<void>;
+  onClosePlan: (analysis: {
+    rootCause: string;
+    immediateAction: string;
+    preventiveAction: string;
+    closureReason: string;
   }) => void | Promise<void>;
   persistenceReady: boolean;
 }) {
@@ -2717,8 +2933,41 @@ function ActionPlan({
   );
   const [submitting, setSubmitting] = useState(false);
   const submittingRef = useRef(false);
+  const [saveAttempted, setSaveAttempted] = useState(false);
+  const [closeAttempted, setCloseAttempted] = useState(false);
+  const [closeDialogOpen, setCloseDialogOpen] = useState(false);
+  const [closureReason, setClosureReason] = useState("");
+  const [closing, setClosing] = useState(false);
+  const closingRef = useRef(false);
+  const isClosed = initialPlan?.status === "종결";
+  const immediateActionError = closeAttempted && !isMeaningful(immediateAction)
+    ? "즉시 조치 결과를 입력하세요."
+    : undefined;
+  const rootCauseError = closeAttempted && !isMeaningful(rootCause)
+    ? "근본 원인 분석을 입력하세요."
+    : undefined;
+  const preventiveActionError = closeAttempted && !isMeaningful(preventiveAction)
+    ? "재발 방지 조치를 입력하세요."
+    : undefined;
+  const closeErrors = closeAttempted ? [
+    isClosed ? "종결된 조치계획은 읽기 전용입니다. 재개할 수 없습니다." : null,
+    !initialPlan ? "저장되지 않은 조치계획은 종결할 수 없습니다. 먼저 저장해 주세요." : null,
+    rootCauseError,
+    immediateActionError,
+    preventiveActionError,
+    tasks.length === 0 ? "종결하려면 조치 과제를 한 건 이상 등록하세요." : null,
+    tasks.some((task) => !task.title.trim()) ? "모든 조치 과제의 과제명을 입력하세요." : null,
+    tasks.some((task) => !task.owner.trim() || task.owner.includes("미지정")) ? "모든 조치 과제에 담당자를 지정하세요." : null,
+    tasks.some((task) => !task.due || task.due === "미정") ? "모든 조치 과제에 완료 예정일을 지정하세요." : null,
+    tasks.some((task) => !task.completed) ? "모든 조치 과제를 완료 처리하세요." : null,
+    closeDialogOpen && !closureReason.trim() ? "종결 판단 사유를 입력하세요." : null,
+  ].filter((error): error is string => Boolean(error)) : [];
+  const closeBlockingErrors = closeErrors.filter((error) => error !== "종결 판단 사유를 입력하세요.");
   const submit = () => {
+    setAttempted(true);
+    if (!name.trim()) return;
     void runSingleFlight(submittingRef, async () => {
+      setSaveAttempted(true);
       setSubmitting(true);
       try {
         await onSave({
@@ -2731,11 +2980,42 @@ function ActionPlan({
                 owner: taskOwner,
                 due: taskDue,
                 status: "대기중",
+                completed: false,
               }
             : null,
         });
       } finally {
         setSubmitting(false);
+      }
+    });
+  };
+  const requestClose = () => {
+    setCloseAttempted(true);
+    const errors = [
+      isClosed,
+      !initialPlan,
+      !isMeaningful(rootCause),
+      !isMeaningful(immediateAction),
+      !isMeaningful(preventiveAction),
+      tasks.length === 0,
+      tasks.some((task) => !task.title.trim()),
+      tasks.some((task) => !task.owner.trim() || task.owner.includes("미지정")),
+      tasks.some((task) => !task.due || task.due === "미정"),
+      tasks.some((task) => !task.completed),
+    ];
+    if (!errors.some(Boolean)) setCloseDialogOpen(true);
+  };
+  const confirmClose = () => {
+    setCloseAttempted(true);
+    if (!closureReason.trim()) {
+      return;
+    }
+    void runSingleFlight(closingRef, async () => {
+      setClosing(true);
+      try {
+        await onClosePlan({ rootCause, immediateAction, preventiveAction, closureReason });
+      } finally {
+        setClosing(false);
       }
     });
   };
@@ -2748,6 +3028,8 @@ function ActionPlan({
         <div className="modal-body">
           <h2>원인분석 및 조치계획</h2>
           <p>Target ID: TGT-2023-1049 | {targetName}</p>
+          {isClosed && <p role="status">종결된 조치계획은 읽기 전용입니다. 재개할 수 없습니다.</p>}
+          <ValidationSummary errors={closeErrors} title="종결 전에 다음 항목을 확인하세요." />
           <section>
             <h3>🔔 알람 상세 정보 (Alarm Details)</h3>
             <div className="alarm-summary">
@@ -2779,29 +3061,44 @@ function ActionPlan({
                 현상
                 <textarea
                   value={immediateAction}
+                  disabled={isClosed}
+                  className={immediateActionError ? "field-invalid" : undefined}
+                  aria-invalid={Boolean(immediateActionError)}
+                  aria-describedby={immediateActionError ? "immediate-action-error" : undefined}
                   onChange={(event) => setImmediateAction(event.target.value)}
                 />
+                {immediateActionError && <span id="immediate-action-error"><FieldError message={immediateActionError} /></span>}
               </label>
               <label>
                 근본 원인
                 <textarea
                   value={rootCause}
+                  disabled={isClosed}
+                  className={rootCauseError ? "field-invalid" : undefined}
+                  aria-invalid={Boolean(rootCauseError)}
+                  aria-describedby={rootCauseError ? "root-cause-error" : undefined}
                   onChange={(event) => setRootCause(event.target.value)}
                 />
+                {rootCauseError && <span id="root-cause-error"><FieldError message={rootCauseError} /></span>}
               </label>
               <label>
                 예방 조치
                 <textarea
                   value={preventiveAction}
+                  disabled={isClosed}
+                  className={preventiveActionError ? "field-invalid" : undefined}
+                  aria-invalid={Boolean(preventiveActionError)}
+                  aria-describedby={preventiveActionError ? "preventive-action-error" : undefined}
                   onChange={(event) => setPreventiveAction(event.target.value)}
                 />
+                {preventiveActionError && <span id="preventive-action-error"><FieldError message={preventiveActionError} /></span>}
               </label>
             </div>
           </section>
           <section>
             <div className="section-head">
               <h3>▣ 조치 계획</h3>
-              <button onClick={onAdd}>＋ 신규 과제 추가</button>
+              <button disabled={isClosed} onClick={onAdd}>＋ 신규 과제 추가</button>
             </div>
             <ScrollTable label="조치계획 과제 목록">
               <table className="tasks">
@@ -2824,10 +3121,20 @@ function ActionPlan({
                       <td>{task.due}</td>
                       <td>
                         <Status>{task.status}</Status>
+                        <label>
+                          <input
+                            type="checkbox"
+                            checked={task.completed}
+                            disabled={isClosed || !initialPlan || submitting || closing}
+                            onChange={() => onToggleComplete(task.id)}
+                          />
+                          완료
+                        </label>
                       </td>
                       <td>
                         <button
                           aria-label="과제 삭제"
+                          disabled={isClosed}
                           onClick={() => onDelete(task.id)}
                         >
                           ⌫
@@ -2840,6 +3147,7 @@ function ActionPlan({
                     <td>
                       <input
                         value={newTask}
+                        disabled={isClosed}
                         onChange={(e) => setNewTask(e.target.value)}
                         placeholder="새로운 과제를 입력하세요..."
                       />
@@ -2848,6 +3156,7 @@ function ActionPlan({
                       <select
                         aria-label="담당자 선택"
                         value={taskOwner}
+                        disabled={isClosed}
                         onChange={(e) => setTaskOwner(e.target.value)}
                       >
                         <option>담당자 미지정</option>
@@ -2859,6 +3168,7 @@ function ActionPlan({
                       <select
                         aria-label="완료예정일"
                         value={taskDue}
+                        disabled={isClosed}
                         onChange={(e) => setTaskDue(e.target.value)}
                       >
                         <option>미정</option>
@@ -2877,13 +3187,43 @@ function ActionPlan({
         <footer>
           <button onClick={onClose}>취소 (Cancel)</button>
           <button
+            disabled={!persistenceReady || isClosed || submitting || closing}
+            onClick={requestClose}
+          >
+            종결 처리
+          </button>
+          <button
             className="black"
-            disabled={!persistenceReady || submitting}
+            disabled={!persistenceReady || submitting || isClosed}
             onClick={submit}
           >
             저장 및 승인 요청
           </button>
         </footer>
+        {closeDialogOpen && (
+          <div className="overlay modal-overlay">
+            <section className="case-modal" role="dialog" aria-modal="true" aria-labelledby="action-plan-close-title">
+              <h2 id="action-plan-close-title">조치계획 종결 확인</h2>
+              <label>
+                조치 결과 / 효과 확인 근거 / 종결 판단 사유
+                <textarea
+                  value={closureReason}
+                  disabled={closing}
+                  className={closeAttempted && !closureReason.trim() ? "field-invalid" : undefined}
+                  aria-invalid={closeAttempted && !closureReason.trim()}
+                  onChange={(event) => setClosureReason(event.target.value)}
+                />
+                <FieldError message={closeAttempted && !closureReason.trim() ? "종결 판단 사유를 입력하세요." : undefined} />
+              </label>
+              <footer>
+                <button disabled={closing} onClick={() => setCloseDialogOpen(false)}>취소</button>
+                <button className="black" disabled={closing} onClick={confirmClose}>
+                  {closing ? "종결 중…" : "종결 확정"}
+                </button>
+              </footer>
+            </section>
+          </div>
+        )}
       </section>
     </div>
   );

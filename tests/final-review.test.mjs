@@ -5,6 +5,7 @@ import { readFile } from "node:fs/promises";
 const handlers = await import("../lib/route-handlers.mjs");
 const seed = await import(`../lib/seed.ts?final-review=${Date.now()}`);
 const targetId = "99198000-0000-4000-8000-000000000002";
+const actionPlanId = "99198000-0000-4000-8000-000000000003";
 
 test("action-plan creation requires an alarm or target context and preserves a selected target", async () => {
   const saved = [];
@@ -31,6 +32,35 @@ test("action-plan creation requires an alarm or target context and preserves a s
   }));
   assert.equal(created.status, 201);
   assert.equal(saved[0].targetId, targetId);
+});
+
+test("standard action-plan closure requires a matching target and uses the closure audit event", async () => {
+  const saved = [];
+  const repository = {
+    async findTarget(id) { return id === targetId ? { id } : null; },
+    async closeActionPlanWithAudit(id, relationTargetId, input, audit) {
+      if (id !== actionPlanId || relationTargetId !== targetId) return null;
+      saved.push({ input, audit });
+      return { id };
+    },
+  };
+  const route = handlers.createActionPlanCloseRouteHandlers(repository);
+  const response = await route.POST(new Request(`http://app.local/api/action-plans/${actionPlanId}/close`, {
+    method: "POST",
+    body: JSON.stringify({
+      targetId,
+      rootCause: "원인 분석",
+      immediateAction: "즉시 조치",
+      preventiveAction: "재발 방지",
+      closureReason: "효과 확인 완료",
+      tasks: [{ description: "조치 확인", owner: "홍길동", dueDate: "2026-08-13", completedAt: "2026-08-13T00:00:00.000Z" }],
+    }),
+  }), { params: Promise.resolve({ id: actionPlanId }) });
+
+  assert.equal(response.status, 200);
+  assert.equal(saved[0].input.status, "종결");
+  assert.equal(saved[0].input.targetStatus, "완료");
+  assert.equal(saved[0].audit.eventType, "action-plan.closed");
 });
 
 test("Sample Delay stages accept only the four approved stage names", () => {

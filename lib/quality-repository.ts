@@ -42,7 +42,17 @@ export type NewActionPlan = {
   preventiveAction?: string | null;
   status: string;
   targetStatus?: string | null;
-  tasks?: Array<{ description: string; owner: string; dueDate?: Date | null }>;
+  tasks?: Array<{ description: string; owner: string; dueDate?: Date | null; completedAt?: Date | null }>;
+};
+
+export type ClosedActionPlan = {
+  rootCause: string;
+  immediateAction: string;
+  preventiveAction: string;
+  closureReason: string;
+  status: "종결";
+  targetStatus: "완료";
+  tasks: Array<{ description: string; owner: string; dueDate: Date; completedAt: Date }>;
 };
 
 export type ActionPlanRelation =
@@ -63,6 +73,7 @@ export interface QualityRepository {
   updateTargetWithAudit(id: string, changes: TargetChanges, audit: NewAuditEvent): Promise<{ id: string } | null>;
   createActionPlanWithAudit(input: NewActionPlan, audit: NewAuditEvent): Promise<{ id: string }>;
   updateActionPlanWithAudit(id: string, relation: ActionPlanRelation, input: NewActionPlan, audit: NewAuditEvent): Promise<{ id: string } | null>;
+  closeActionPlanWithAudit(id: string, targetId: string, input: ClosedActionPlan, audit: NewAuditEvent): Promise<{ id: string } | null>;
   createMasterRuleWithAudit(input: NewMasterRule, audit: NewAuditEvent): Promise<{ id: string }>;
   updateMasterRuleWithAudit(id: string, changes: MasterRuleChanges, audit: NewAuditEvent): Promise<{ id: string } | null>;
   createMasterCodeWithAudit(input: NewMasterCode, audit: NewAuditEvent): Promise<{ id: string }>;
@@ -131,6 +142,11 @@ export function createQualityRepository(database: unknown, tables: QualityTables
       const id = crypto.randomUUID();
       await db.batch([
         db.insert(tables.targets).values({ ...input, id }),
+        ...(input.sourceAlarmId ? [
+          db.update(tables.alarms)
+            .set({ status: "관리대상" })
+            .where(eq(tables.alarms.id, input.sourceAlarmId)),
+        ] : []),
         db.insert(tables.auditEvents).values({ ...audit, id: crypto.randomUUID(), entityId: id }),
       ]);
       return { id };
@@ -198,6 +214,47 @@ export function createQualityRepository(database: unknown, tables: QualityTables
         db.execute(sql`insert into ${tables.auditEvents} (id, event_type, entity_type, entity_id, details)
           select ${crypto.randomUUID()}, ${audit.eventType}, ${audit.entityType}, ${id}, ${audit.details ?? null}
           where exists (select 1 from ${tables.actionPlans} where ${planWhere})`),
+      ];
+      const [updated] = await db.batch(statements);
+      return updated[0] ?? null;
+    },
+    async closeActionPlanWithAudit(id, targetId, input, audit) {
+      const planWhere = and(eq(tables.actionPlans.id, id), eq(tables.actionPlans.targetId, targetId));
+      const planExists = sql`exists (select 1 from ${tables.actionPlans} where ${planWhere})`;
+      const statements = [
+        db.update(tables.actionPlans).set({
+          rootCause: input.rootCause,
+          immediateAction: input.immediateAction,
+          preventiveAction: input.preventiveAction,
+          closureReason: input.closureReason,
+          status: "종결",
+        }).where(planWhere).returning({ id: tables.actionPlans.id }),
+        db.delete(tables.actionTasks).where(
+          sql`${planExists} and ${eq(tables.actionTasks.actionPlanId, id)}`,
+        ),
+        ...input.tasks.map((task) => db.execute(sql`insert into ${tables.actionTasks} (id, action_plan_id, description, owner, due_date, completed_at)
+          select ${crypto.randomUUID()}, ${id}, ${task.description}, ${task.owner}, ${task.dueDate}, ${task.completedAt}
+          where ${planExists}`)),
+        db.update(tables.targets).set({ status: "완료" }).where(and(
+          eq(tables.targets.id, targetId),
+          planExists,
+        )),
+        db.update(tables.alarms).set({ status: "종결" }).where(sql`exists (
+          select 1 from ${tables.targets}
+          where ${eq(tables.targets.id, targetId)}
+            and ${eq(tables.targets.sourceAlarmId, tables.alarms.id)}
+            and ${planExists}
+        )`),
+        db.execute(sql`insert into ${tables.auditEvents} (id, event_type, entity_type, entity_id, details)
+          select ${crypto.randomUUID()}, ${audit.eventType}, ${audit.entityType}, ${id}, ${audit.details ?? null}
+          where ${planExists}`),
+        db.execute(sql`insert into ${tables.auditEvents} (id, event_type, entity_type, entity_id, details)
+          select ${crypto.randomUUID()}, ${"target.updated"}, ${"target"}, ${targetId}, ${{ status: "완료" }}
+          where ${planExists}`),
+        db.execute(sql`insert into ${tables.auditEvents} (id, event_type, entity_type, entity_id, details)
+          select ${crypto.randomUUID()}, ${"alarm.updated"}, ${"alarm"}, targets.source_alarm_id, ${{ status: "종결" }}
+          from ${tables.targets}
+          where ${eq(tables.targets.id, targetId)} and targets.source_alarm_id is not null and ${planExists}`),
       ];
       const [updated] = await db.batch(statements);
       return updated[0] ?? null;

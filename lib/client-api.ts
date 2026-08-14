@@ -104,6 +104,16 @@ export type ActionPlanRelation =
 
 const safeError = "데이터를 불러오지 못했습니다. 잠시 후 다시 시도해 주세요.";
 
+export class ApiError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let response: Response;
   try {
@@ -111,7 +121,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   } catch {
     throw new Error(safeError);
   }
-  if (!response.ok) throw new Error(safeError);
+  if (!response.ok) throw new ApiError(safeError, response.status);
   try {
     return await response.json() as T;
   } catch {
@@ -194,4 +204,12 @@ export async function saveActionPlan(input: ActionPlanInput) {
 
 export async function updateActionPlan(id: string, input: ActionPlanInput) {
   return request<{ actionPlan: { id: string } }>(`/api/action-plans/${encodeURIComponent(id)}`, jsonRequest("PATCH", input));
+}
+
+export async function closeActionPlan(id: string, input: ActionPlanInput): Promise<{ id: string }> {
+  const response = await request<{ actionPlan: { id: string } }>(
+    `/api/action-plans/${encodeURIComponent(id)}/close`,
+    jsonRequest("POST", input),
+  );
+  return response.actionPlan;
 }

@@ -320,6 +320,7 @@ export default function Home() {
   const [actionPlan, setActionPlan] = useState(false);
   const [actionPlanAlarmId, setActionPlanAlarmId] = useState<string | null>(null);
   const [persistedActionPlan, setPersistedActionPlan] = useState<PersistedActionPlan | null>(null);
+  const actionPlanRelationRef = useRef<string | null>(null);
   const [newCase, setNewCase] = useState(false);
   const [masterTab, setMasterTab] = useState("알람 규칙");
   const [notice, setNotice] = useState<Feedback | null>(null);
@@ -413,7 +414,9 @@ export default function Home() {
   }, []);
 
   const reloadActionPlan = useCallback(async (relation: ActionPlanRelation) => {
+    const relationKey = "targetId" in relation ? `target:${relation.targetId}` : `alarm:${relation.alarmId}`;
     const [latest = null] = await listActionPlans(relation);
+    if (actionPlanRelationRef.current !== relationKey) return latest;
     setPersistedActionPlan(latest);
     setTasks(
       latest?.tasks.map((task) => ({
@@ -606,6 +609,7 @@ export default function Home() {
       showNotice("DB에서 다시 불러온 관리대상만 저장할 수 있습니다.");
       return;
     }
+    actionPlanRelationRef.current = `target:${target.id}`;
     setSelectedTarget(target);
     setActionPlanAlarmId(target.sourceAlarmId ?? null);
     setPersistedActionPlan(null);

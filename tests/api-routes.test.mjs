@@ -148,6 +148,7 @@ test("alarm detail handler returns the requested aggregate", async () => {
     detail: { alarmId, equipment: "CNC-M-04", productionLot: "LOT-231012-001" },
     measurements: [{ alarmId, metricName: "CPK", metricValue: "1.12", thresholdValue: "1.33", measuredAt: "2026-08-18T00:00:00.000Z" }],
     attachments: [{ alarmId, fileName: "cpk-report.pdf", fileSizeBytes: 1024 }],
+    sampleDelayStages: [{ alarmId, stageName: "샘플 의뢰", eventAt: "2026-08-18T00:00:00.000Z", elapsedMinutes: 0, allowedMinutes: 60, isDelayed: false }],
     related: {
       similarAlarms: [{ id: "99198000-0000-4000-8000-000000000010", alarmCode: "AL-99197" }],
       targets: [{ id: targetId, targetCode: "TRG-10001" }],
@@ -172,10 +173,11 @@ test("alarm detail handler returns the requested aggregate", async () => {
   );
   const body = await detail.json();
   assert.equal(detail.status, 200);
-  assert.deepEqual(Object.keys(body).sort(), ["alarm", "attachments", "detail", "measurements", "related"]);
+  assert.deepEqual(Object.keys(body).sort(), ["alarm", "attachments", "detail", "measurements", "related", "sampleDelayStages"]);
   assert.equal(body.detail.equipment, "CNC-M-04");
   assert.deepEqual(body.measurements.map((point) => point.alarmId), [alarmId]);
   assert.deepEqual(body.attachments.map((attachment) => attachment.alarmId), [alarmId]);
+  assert.deepEqual(body.sampleDelayStages.map((stage) => stage.alarmId), [alarmId]);
   assert.deepEqual(body.related.targets.map((target) => target.id), [targetId]);
   assert.deepEqual(calls, [alarmId]);
 });

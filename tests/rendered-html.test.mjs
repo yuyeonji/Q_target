@@ -433,11 +433,16 @@ test("loads selected alarm detail data and avoids fabricated drawer values", asy
   assert.match(page, /const \[alarmDetailLoading, setAlarmDetailLoading\] = useState\(false\)/);
   assert.match(page, /const \[alarmDetailError, setAlarmDetailError\] = useState<string \| null>\(null\)/);
   assert.match(page, /selectedAlarmIdRef\.current === selectedId/);
+  assert.match(page, /const matchingDetail = alarmDetail\?\.alarm\.id === alarm\.id \? alarmDetail : null/);
+  assert.match(page, /setSampleDelayStages\(detail\.sampleDelayStages \?\? null\)/);
   assert.match(page, /상세 데이터를 불러오는 중/);
   assert.match(page, /등록된 상세 데이터가 없습니다/);
   assert.match(page, /상세 데이터를 불러오지 못했습니다/);
   assert.match(alarmDrawer, /detail\?\.equipment/);
   assert.match(alarmDrawer, /detail\?\.productionLot/);
+  assert.match(alarmDrawer, /검토 기한/);
+  assert.match(alarmDrawer, /response\?\.alarm\.reviewDeadline/);
+  assert.match(alarmDrawer, /!detailLoading && !detailError && detailLoaded && !detail/);
   assert.doesNotMatch(alarmDrawer, /<strong>CNC-M-04<\/strong>/);
   assert.doesNotMatch(alarmDrawer, /<strong>LOT-231012-001<\/strong>/);
   assert.doesNotMatch(alarmDrawer, /5,000 \/ 100/);

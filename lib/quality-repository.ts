@@ -88,6 +88,7 @@ type AlarmDetailAggregate = {
   detail: Record<string, unknown> | null;
   measurements: Array<Record<string, unknown>>;
   attachments: Array<Record<string, unknown>>;
+  sampleDelayStages: Array<Record<string, unknown>>;
   related: {
     similarAlarms: Array<Record<string, unknown>>;
     targets: Array<Record<string, unknown>>;
@@ -124,10 +125,11 @@ export function createQualityRepository(database: unknown, tables: QualityTables
         where ${eq(tables.targets.id, tables.actionPlans.targetId)}
           and ${eq(sql.raw("source_alarm.process"), alarm.process)}
       )`;
-      const [detail, measurements, attachments, similarAlarms, relatedTargets, completedPlans] = await Promise.all([
+      const [detail, measurements, attachments, sampleDelayStages, similarAlarms, relatedTargets, completedPlans] = await Promise.all([
         db.select().from(tables.alarmDetails).where(eq(tables.alarmDetails.alarmId, id)).limit(1),
         db.select().from(tables.alarmMeasurements).where(eq(tables.alarmMeasurements.alarmId, id)).orderBy(asc(tables.alarmMeasurements.measuredAt)),
         db.select().from(tables.alarmAttachments).where(eq(tables.alarmAttachments.alarmId, id)).orderBy(desc(tables.alarmAttachments.createdAt)),
+        db.select().from(tables.sampleDelayStages).where(eq(tables.sampleDelayStages.alarmId, id)).orderBy(asc(tables.sampleDelayStages.eventAt)),
         db.select().from(tables.alarms).where(and(
           eq(tables.alarms.type, alarm.type),
           eq(tables.alarms.process, alarm.process),
@@ -153,6 +155,7 @@ export function createQualityRepository(database: unknown, tables: QualityTables
         detail: detail ?? null,
         measurements,
         attachments,
+        sampleDelayStages,
         related: {
           similarAlarms,
           targets: relatedTargets,

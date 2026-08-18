@@ -8,6 +8,7 @@ export type PersistedAlarm = {
   line: string;
   status: string;
   reviewer?: string | null;
+  reviewDeadline?: string | null;
 };
 
 export type PersistedTarget = {
@@ -107,6 +108,7 @@ export type AlarmDetailResponse = {
   detail: AlarmDetail | null;
   measurements: AlarmMeasurement[];
   attachments: AlarmAttachment[];
+  sampleDelayStages?: SampleDelayStage[];
   related: {
     similarAlarms: RelatedAlarm[];
     targets: RelatedTarget[];

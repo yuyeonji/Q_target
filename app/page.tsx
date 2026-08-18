@@ -461,6 +461,7 @@ export default function Home() {
       .then((detail) => {
         if (active && selectedAlarmIdRef.current === selectedId) {
           setAlarmDetail(detail);
+          setSampleDelayStages(detail.sampleDelayStages ?? null);
         }
       })
       .catch(() => {
@@ -860,12 +861,15 @@ export default function Home() {
       {analysisPanel && (
         <AnalysisPanel panel={analysisPanel} onClose={closeAnalysis} />
       )}
-      {alarm &&
+      {alarm && (() => {
+        const matchingDetail = alarmDetail?.alarm.id === alarm.id ? alarmDetail : null;
+        const matchingSampleDelayStages = matchingDetail ? sampleDelayStages : null;
+        return (
         (alarm.type === "Sample Delay" ? (
           <SampleDelayDrawer
             alarm={alarm}
-            stages={sampleDelayStages}
-            detail={alarmDetail}
+            stages={matchingSampleDelayStages}
+            detail={matchingDetail}
             detailLoading={alarmDetailLoading}
             detailError={alarmDetailError}
             onRetryDetail={() => setAlarmDetailRetry((current) => current + 1)}
@@ -882,7 +886,7 @@ export default function Home() {
         ) : (
           <AlarmDrawer
             alarm={alarm}
-            detail={alarmDetail}
+            detail={matchingDetail}
             detailLoading={alarmDetailLoading}
             detailError={alarmDetailError}
             onRetryDetail={() => setAlarmDetailRetry((current) => current + 1)}
@@ -896,7 +900,9 @@ export default function Home() {
             }
             onAction={() => void openTargetRegistration()}
           />
-        ))}
+        ))
+        );
+      })()}
       {selectedRegistrationAlarm && (
         <TargetRegistrationDialog
           alarm={selectedRegistrationAlarm}
@@ -2527,9 +2533,9 @@ function measurementAverage(measurements: AlarmDetailResponse["measurements"], d
   return (values.reduce((total, value) => total + value, 0) / values.length).toFixed(2);
 }
 
-function MeasurementBars({ measurements }: { measurements: AlarmDetailResponse["measurements"] }) {
+function MeasurementBars({ measurements, emptyMessage }: { measurements: AlarmDetailResponse["measurements"]; emptyMessage: string }) {
   const values = measurements.slice(-30).map((measurement) => Number(measurement.metricValue)).filter(Number.isFinite);
-  if (!values.length) return <p>{noDetailMessage}</p>;
+  if (!values.length) return <p>{emptyMessage}</p>;
   const min = Math.min(...values);
   const max = Math.max(...values);
   const range = max - min || 1;
@@ -2566,6 +2572,8 @@ function AlarmDrawer({
   persistenceReady: boolean;
 }) {
   const detail = response?.detail ?? null;
+  const detailLoaded = response?.alarm.id === alarm.id;
+  const emptyDetailValue = detailLoaded && !detail ? noDetailMessage : "-";
   const measurements = response?.measurements ?? [];
   const latestMeasurement = measurements.at(-1);
   const metricName = latestMeasurement?.metricName ?? "측정 값";
@@ -2578,13 +2586,14 @@ function AlarmDrawer({
           </button>
           <span className="badge">NEW ALARM ID: {alarm.code ?? alarm.id}</span>
           <h2>{alarm.item}</h2>
-          <p className="red-text">{detail?.measurementSummary ?? noDetailMessage}</p>
+          <p className="red-text">{detail?.measurementSummary ?? emptyDetailValue}</p>
           {detailLoading && <p role="status">상세 데이터를 불러오는 중입니다.</p>}
           {detailError && (
             <p role="alert">
               {detailError} <button type="button" onClick={onRetryDetail}>다시 시도</button>
             </p>
           )}
+          {!detailLoading && !detailError && detailLoaded && !detail && <p>{noDetailMessage}</p>}
           <section>
             <h3>알람 기본 정보</h3>
             <div className="info-grid">
@@ -2607,20 +2616,20 @@ function AlarmDrawer({
                 </strong>
               </p>
               <p>
-                설비<strong>{detail?.equipment ?? noDetailMessage}</strong>
+                설비<strong>{detail?.equipment ?? emptyDetailValue}</strong>
               </p>
               <p>
-                생산 LOT<strong>{detail?.productionLot ?? noDetailMessage}</strong>
+                생산 LOT<strong>{detail?.productionLot ?? emptyDetailValue}</strong>
               </p>
               <p>
-                최근 측정 시각
-                <strong className="red-text">{latestMeasurement?.measuredAt ? new Date(latestMeasurement.measuredAt).toLocaleString("ko-KR") : noDetailMessage}</strong>
+                검토 기한
+                <strong className="red-text">{response?.alarm.reviewDeadline ? new Date(response.alarm.reviewDeadline).toLocaleString("ko-KR") : emptyDetailValue}</strong>
               </p>
             </div>
           </section>
           <section>
             <h3>상세 수치 및 기준 비교</h3>
-            <p>{detail?.measurementSummary ?? noDetailMessage}</p>
+            <p>{detail?.measurementSummary ?? emptyDetailValue}</p>
             <div className="measurements">
               <article>
                 <b>현재 값 vs 기준 값</b>
@@ -2645,7 +2654,7 @@ function AlarmDrawer({
               </article>
               <article>
                 <b>최근 30일 추세</b>
-                <MeasurementBars measurements={measurements} />
+                <MeasurementBars measurements={measurements} emptyMessage={detailLoaded ? noDetailMessage : "-"} />
               </article>
             </div>
           </section>
@@ -2655,7 +2664,7 @@ function AlarmDrawer({
               <p>
                 영향받는 제품/고객
                 <br />
-                <b>{detail?.affectedProductsCustomers ?? noDetailMessage}</b>
+                <b>{detail?.affectedProductsCustomers ?? emptyDetailValue}</b>
               </p>
               <p>
                 로트 생산/검사/부적합 수량
@@ -2667,16 +2676,16 @@ function AlarmDrawer({
               <p>
                 출하 상태 및 재고
                 <br />
-                <b>{detail?.shippingStatus ?? noDetailMessage} / 재고 {formatQuantity(detail?.inventoryQuantity)}</b>
+                <b>{detail?.shippingStatus ?? emptyDetailValue} / 재고 {detailLoaded ? formatQuantity(detail?.inventoryQuantity) : "-"}</b>
               </p>
               <p>
                 연관 CTQ 및 공정 요인
                 <br />
-                <b>{detail ? [detail.relatedCtq, detail.processFactor].filter(Boolean).join(", ") || noDetailMessage : noDetailMessage}</b>
+                <b>{detail ? [detail.relatedCtq, detail.processFactor].filter(Boolean).join(", ") || noDetailMessage : emptyDetailValue}</b>
               </p>
             </div>
           </section>
-          <RelatedInfoAccordion detail={response} />
+          <RelatedInfoAccordion detail={response} loaded={detailLoaded} />
         </div>
         <div className="drawer-footer">
           <button disabled={!persistenceReady} onClick={onCloseAlarm}>조치 불필요 종결</button>
@@ -2690,29 +2699,29 @@ function AlarmDrawer({
   );
 }
 
-function RelatedInfoAccordion({ detail }: { detail: AlarmDetailResponse | null }) {
+function RelatedInfoAccordion({ detail, loaded }: { detail: AlarmDetailResponse | null; loaded: boolean }) {
   const sections = [
     {
       label: "최근 유사 알람",
-      content: detail?.related.similarAlarms.length
+      content: !loaded ? "-" : detail?.related.similarAlarms.length
         ? detail.related.similarAlarms.map((alarm) => `${alarm.alarmCode} · ${alarm.item} · ${alarm.status}`).join("\n")
         : "등록된 최근 유사 알람이 없습니다.",
     },
     {
       label: "과거 관리대상 내역",
-      content: detail?.related.targets.length
+      content: !loaded ? "-" : detail?.related.targets.length
         ? detail.related.targets.map((target) => `${target.targetCode} · ${target.name} · ${target.status}`).join("\n")
         : "등록된 과거 관리대상 내역이 없습니다.",
     },
     {
       label: "과거 조치 및 효과",
-      content: detail?.related.actionOutcomes.length
+      content: !loaded ? "-" : detail?.related.actionOutcomes.length
         ? detail.related.actionOutcomes.map((outcome) => outcome.closureReason || outcome.preventiveAction || outcome.rootCause || "조치 결과 정보 없음").join("\n")
         : "등록된 과거 조치 및 효과가 없습니다.",
     },
     {
       label: "첨부 파일",
-      content: detail?.attachments.length
+      content: !loaded ? "-" : detail?.attachments.length
         ? detail.attachments.map((attachment) => `${attachment.fileName}${attachment.fileSizeBytes ? ` · ${attachment.fileSizeBytes.toLocaleString("ko-KR")}B` : ""}`).join("\n")
         : "등록된 첨부 파일이 없습니다.",
     },
@@ -2814,7 +2823,7 @@ function SampleDelayDrawer({
           <h2>{alarm.item}</h2>
           {detailLoading && <p role="status">상세 데이터를 불러오는 중입니다.</p>}
           {detailError && <p role="alert">{detailError} <button type="button" onClick={onRetryDetail}>다시 시도</button></p>}
-          {!detailLoading && !detail?.detail && !detailError && <p>{noDetailMessage}</p>}
+          {!detailLoading && !detailError && detail?.alarm.id === alarm.id && !detail.detail && <p>{noDetailMessage}</p>}
           <p className="red-text">판정 지연: 허용 기준을 38분 초과했습니다.</p>
           <section>
             <h3>샘플 지연 워크플로</h3>
@@ -2851,7 +2860,7 @@ function SampleDelayDrawer({
               ))}
             </ul>
           </section>
-          <RelatedInfoAccordion detail={detail} />
+          <RelatedInfoAccordion detail={detail} loaded={detail?.alarm.id === alarm.id} />
         </div>
         <div className="drawer-footer">
           <button disabled={!persistenceReady} onClick={onCloseAlarm}>조치 불필요 종결</button>

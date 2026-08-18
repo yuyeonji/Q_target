@@ -216,10 +216,11 @@ test("helpers return safe errors without server details", async () => {
 
 test("alarm detail uses an encoded alarm path and returns the complete aggregate", async () => {
   const aggregate = {
-    alarm: { id: "AL / 1", alarmCode: "AL-99198", occurredAt: "2023-10-12T08:00:00Z", item: "Bearing Housing A1", type: "CPK Drop", process: "Machining", line: "Line 4", status: "긴급" },
+    alarm: { id: "AL / 1", alarmCode: "AL-99198", occurredAt: "2023-10-12T08:00:00Z", reviewDeadline: "2023-10-13T10:42:15Z", item: "Bearing Housing A1", type: "CPK Drop", process: "Machining", line: "Line 4", status: "긴급" },
     detail: { alarmId: "AL / 1", equipment: "CNC-M-05", productionLot: "LOT-231012-005", currentValue: "1.18", thresholdValue: "1.33" },
     measurements: [{ alarmId: "AL / 1", metricName: "CPK", metricValue: "1.18", thresholdValue: "1.33", measuredAt: "2023-10-12T08:00:00Z" }],
     attachments: [{ alarmId: "AL / 1", fileName: "cpk-report.pdf", fileSizeBytes: 1024 }],
+    sampleDelayStages: [{ stageName: "샘플 의뢰", eventAt: "2023-10-12T08:00:00Z", elapsedMinutes: 0, allowedMinutes: 60, isDelayed: false }],
     related: { similarAlarms: [], targets: [], actionOutcomes: [] },
   };
   await withFetch(new Response(JSON.stringify(aggregate), { status: 200 }), async (calls) => {
@@ -228,6 +229,8 @@ test("alarm detail uses an encoded alarm path and returns the complete aggregate
     assert.equal(detail.detail?.equipment, "CNC-M-05");
     assert.deepEqual(detail.measurements.map((point) => point.alarmId), ["AL / 1"]);
     assert.deepEqual(detail.attachments.map((attachment) => attachment.fileName), ["cpk-report.pdf"]);
+    assert.equal(detail.alarm.reviewDeadline, "2023-10-13T10:42:15Z");
+    assert.deepEqual(detail.sampleDelayStages?.map((stage) => stage.stageName), ["샘플 의뢰"]);
     assert.deepEqual(detail.related, aggregate.related);
   });
 
@@ -236,4 +239,6 @@ test("alarm detail uses an encoded alarm path and returns the complete aggregate
   assert.match(source, /export type AlarmMeasurement =/);
   assert.match(source, /export type AlarmAttachment =/);
   assert.match(source, /export type AlarmDetailResponse =/);
+  assert.match(source, /reviewDeadline\?: string \| null/);
+  assert.match(source, /sampleDelayStages\?: SampleDelayStage\[\]/);
 });

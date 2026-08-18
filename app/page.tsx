@@ -301,9 +301,9 @@ export default function Home() {
   const [search, setSearch] = useState("");
   const [alarmFilter, setAlarmFilter] = useState("전체");
   const [targetFilter, setTargetFilter] = useState("전체");
-  const [period, setPeriod] = useState("최근 7일");
-  const [factory, setFactory] = useState("전체 공장");
-  const [product, setProduct] = useState("전체 제품");
+  const [period, setPeriod] = useState("전체");
+  const [factory, setFactory] = useState("전체");
+  const [product, setProduct] = useState("전체");
   const [notificationOpen, setNotificationOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [supportOpen, setSupportOpen] = useState<
@@ -1103,12 +1103,13 @@ function Dashboard({
 }) {
   const [dashboardData, setDashboardData] = useState<DashboardResponse | null>(null);
   const [dashboardError, setDashboardError] = useState<string | null>(null);
+  const [appliedFilters, setAppliedFilters] = useState({ period, factory, product });
 
   useEffect(() => {
     const params = new URLSearchParams({
-      period: period.includes("7") ? "7d" : period.includes("30") ? "30d" : "quarter",
-      factory: factory.includes("전체") ? "all" : factory.includes("알파") ? "Alpha" : "Beta",
-      productType: product.includes("전체") ? "all" : product,
+      period: appliedFilters.period === "전체" ? "all" : appliedFilters.period.includes("7") ? "7d" : appliedFilters.period.includes("30") ? "30d" : "quarter",
+      factory: appliedFilters.factory === "전체" ? "all" : appliedFilters.factory,
+      productType: appliedFilters.product === "전체" ? "all" : appliedFilters.product,
     });
     let active = true;
     void fetch(`/api/dashboard?${params}`)
@@ -1121,7 +1122,7 @@ function Dashboard({
       })
       .catch(() => { if (active) setDashboardError("대시보드 데이터를 불러오지 못했습니다."); });
     return () => { active = false; };
-  }, [period, factory, product]);
+  }, [appliedFilters]);
 
   const trendMax = Math.max(...(dashboardData?.chartData.alertTrend.map((point) => point.count) ?? [1]));
 
@@ -1131,13 +1132,14 @@ function Dashboard({
         <div>
           <h2>현황판 개요</h2>
           <p>
-            {period} · {factory} · {product}
+            {appliedFilters.period} · {appliedFilters.factory} · {appliedFilters.product}
           </p>
         </div>
         <div className="filters">
           <label>
             기간
             <select value={period} onChange={(e) => setPeriod(e.target.value)}>
+              <option>전체</option>
               <option>최근 7일</option>
               <option>최근 30일</option>
               <option>이번 분기</option>
@@ -1149,9 +1151,8 @@ function Dashboard({
               value={factory}
               onChange={(e) => setFactory(e.target.value)}
             >
-              <option>전체 공장</option>
-              <option>알파 공장</option>
-              <option>베타 공장</option>
+              <option>전체</option>
+              {(dashboardData?.filterOptions.customers ?? []).map((customer) => <option key={customer}>{customer}</option>)}
             </select>
           </label>
           <label>
@@ -1160,11 +1161,11 @@ function Dashboard({
               value={product}
               onChange={(e) => setProduct(e.target.value)}
             >
-              <option>전체 제품</option>
-              <option>Type X</option>
-              <option>Type Y</option>
+              <option>전체</option>
+              {(dashboardData?.filterOptions.products ?? []).map((item) => <option key={item}>{item}</option>)}
             </select>
           </label>
+          <button type="button" className="black" onClick={() => setAppliedFilters({ period, factory, product })}>조회</button>
         </div>
       </div>
       <div className="kpis">
@@ -1175,7 +1176,7 @@ function Dashboard({
           <Kpi
             title="전체 알람"
             value={dashboardData ? dashboardData.kpi.totalAlerts.toLocaleString() : "-"}
-            note="● 142 심각    ● 893 신규"
+            note={dashboardData ? `● ${dashboardData.kpi.criticalAlerts} 심각    ● ${dashboardData.kpi.newAlerts} 신규` : "-"}
             trend="↗ +12%"
           />
         </button>
@@ -1186,7 +1187,7 @@ function Dashboard({
           <Kpi
             title="관리대상"
             value={dashboardData ? dashboardData.kpi.totalTargets.toLocaleString() : "-"}
-            note="● 62 진행중    ● 12 기한 초과"
+            note={dashboardData ? `● ${dashboardData.kpi.inProgressTargets} 진행 중    ● ${dashboardData.kpi.overdueTargets} 기한 초과` : "-"}
             trend="→ 0%"
           />
         </button>
@@ -1315,6 +1316,7 @@ function Dashboard({
           </ScrollTable>
         </article>
         <article className="card overdue">
+          <h3>⚠ 기한 초과 관리대상</h3>
           {dashboardData?.cases.map((item, index) => (
             <div className="overdue-row" key={item.id}>
               <small>{item.targetCode}</small>
@@ -1324,18 +1326,7 @@ function Dashboard({
           ))}
           {!dashboardData && !dashboardError && <p className="empty">대시보드 데이터를 불러오는 중입니다.</p>}
           {dashboardError && <p className="empty">{dashboardError}</p>}
-          <h3>⚠ 기한 초과 관리대상</h3>
-          {["L1 불량률 감소", "자동 샘플링 도입", "3분기 공정 심사 준수"].map(
-            (x, i) => (
-              <div className="overdue-row" key={x}>
-                <small>TGT-8{84 + i}</small>
-                <b>{x}</b>
-                <div>
-                  <i style={{ width: `${65 + i * 10}%` }} />
-                </div>
-              </div>
-            ),
-          )}
+          {dashboardData && dashboardData.cases.length === 0 && <p className="empty">기한이 초과된 관리대상이 없습니다.</p>}
         </article>
       </div>
     </div>

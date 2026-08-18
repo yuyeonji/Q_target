@@ -71,6 +71,20 @@ test("removes registered alarms from history without a registration status contr
   assert.match(page, /item\.status !== "관리대상"/);
 });
 
+test("dashboard applies all filters only when the query button is pressed", async () => {
+  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const dashboard = page.match(/function Dashboard\([\s\S]*?\r?\n}\r?\n\r?\nfunction AnalysisPanel/)?.[0] ?? "";
+
+  assert.match(dashboard, /const \[appliedFilters, setAppliedFilters\] = useState/);
+  assert.match(dashboard, /onClick=\{\(\) => setAppliedFilters\(\{ period, factory, product \}\)\}/);
+  assert.match(dashboard, />조회<\/button>/);
+  assert.match(dashboard, /filterOptions\.customers/);
+  assert.match(dashboard, /filterOptions\.products/);
+  assert.match(page, /const \[period, setPeriod\] = useState\("전체"\)/);
+  assert.match(page, /const \[factory, setFactory\] = useState\("전체"\)/);
+  assert.match(page, /const \[product, setProduct\] = useState\("전체"\)/);
+});
+
 test("excludes every source alarm that already has a managed target from alarm history", async () => {
   const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   const visibleAlarms = page.match(/const visibleAlarms = useMemo\([\s\S]*?\n  \);/)?.[0] ?? "";
@@ -324,9 +338,8 @@ test("fits all overdue targets and the paginated target list in a desktop viewpo
   const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
 
-  assert.match(page, /L1 불량률 감소/);
-  assert.match(page, /자동 샘플링 도입/);
-  assert.match(page, /3분기 공정 심사 준수/);
+  assert.match(page, /dashboardData\?\.cases\.map/);
+  assert.doesNotMatch(page, /L1 불량률 감소/);
   assert.doesNotMatch(page, /const pageSize = 3/);
   assert.match(page, /window\.innerHeight/);
   assert.match(page, /addEventListener\("resize"/);

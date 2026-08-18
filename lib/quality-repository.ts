@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, ne, or, sql } from "drizzle-orm";
 
 export type NewTarget = {
   targetCode: string;
@@ -62,6 +62,7 @@ export type ActionPlanRelation =
 export interface QualityRepository {
   listAlarms(): Promise<unknown[]>;
   findAlarm(id: string): Promise<unknown | null>;
+  getAlarmDetail(id: string): Promise<AlarmDetailAggregate | null>;
   listSampleDelayStages(alarmId: string): Promise<unknown[]>;
   listTargets(): Promise<unknown[]>;
   findTarget(id: string): Promise<unknown | null>;
@@ -82,7 +83,18 @@ export interface QualityRepository {
 }
 
 type NewAuditEvent = { eventType: string; entityType: string; details?: Record<string, unknown> };
-type QualityTables = { actionPlans: any; actionTasks: any; alarms: any; auditEvents: any; masterCodes: any; masterRules: any; sampleDelayStages: any; targets: any };
+type AlarmDetailAggregate = {
+  alarm: Record<string, unknown>;
+  detail: Record<string, unknown> | null;
+  measurements: Array<Record<string, unknown>>;
+  attachments: Array<Record<string, unknown>>;
+  related: {
+    similarAlarms: Array<Record<string, unknown>>;
+    targets: Array<Record<string, unknown>>;
+    actionOutcomes: Array<Record<string, unknown> & { tasks: Array<Record<string, unknown>> }>;
+  };
+};
+type QualityTables = { actionPlans: any; actionTasks: any; alarmAttachments: any; alarmDetails: any; alarmMeasurements: any; alarms: any; auditEvents: any; masterCodes: any; masterRules: any; sampleDelayStages: any; targets: any };
 
 export function createQualityRepository(database: unknown, tables: QualityTables): QualityRepository {
   // The Drizzle type includes all current tables, while this boundary deliberately
@@ -96,6 +108,60 @@ export function createQualityRepository(database: unknown, tables: QualityTables
     async findAlarm(id) {
       const [alarm] = await db.select().from(tables.alarms).where(eq(tables.alarms.id, id)).limit(1);
       return alarm ?? null;
+    },
+    async getAlarmDetail(id) {
+      const [alarm] = await db.select().from(tables.alarms).where(eq(tables.alarms.id, id)).limit(1);
+      if (!alarm) return null;
+
+      const targetMatchesProcess = sql`exists (
+        select 1 from ${tables.alarms} as source_alarm
+        where ${eq(tables.targets.sourceAlarmId, sql.raw("source_alarm.id"))}
+          and ${eq(sql.raw("source_alarm.process"), alarm.process)}
+      )`;
+      const actionPlanMatchesProcess = sql`exists (
+        select 1 from ${tables.targets}
+        join ${tables.alarms} as source_alarm on ${eq(tables.targets.sourceAlarmId, sql.raw("source_alarm.id"))}
+        where ${eq(tables.targets.id, tables.actionPlans.targetId)}
+          and ${eq(sql.raw("source_alarm.process"), alarm.process)}
+      )`;
+      const [detail, measurements, attachments, similarAlarms, relatedTargets, completedPlans] = await Promise.all([
+        db.select().from(tables.alarmDetails).where(eq(tables.alarmDetails.alarmId, id)).limit(1),
+        db.select().from(tables.alarmMeasurements).where(eq(tables.alarmMeasurements.alarmId, id)).orderBy(asc(tables.alarmMeasurements.measuredAt)),
+        db.select().from(tables.alarmAttachments).where(eq(tables.alarmAttachments.alarmId, id)).orderBy(desc(tables.alarmAttachments.createdAt)),
+        db.select().from(tables.alarms).where(and(
+          eq(tables.alarms.type, alarm.type),
+          eq(tables.alarms.process, alarm.process),
+          ne(tables.alarms.id, id),
+        )).orderBy(desc(tables.alarms.occurredAt)).limit(3),
+        db.select().from(tables.targets).where(or(
+          eq(tables.targets.sourceAlarmId, id),
+          targetMatchesProcess,
+        )).orderBy(desc(tables.targets.createdAt)).limit(5),
+        db.select().from(tables.actionPlans).where(and(
+          eq(tables.actionPlans.status, "종결"),
+          or(eq(tables.actionPlans.alarmId, id), actionPlanMatchesProcess),
+        )).orderBy(desc(tables.actionPlans.createdAt)).limit(5),
+      ]);
+      const actionTasks = completedPlans.length
+        ? await db.select().from(tables.actionTasks)
+          .where(inArray(tables.actionTasks.actionPlanId, completedPlans.map((plan: { id: string }) => plan.id)))
+          .orderBy(asc(tables.actionTasks.createdAt))
+        : [];
+
+      return {
+        alarm,
+        detail: detail ?? null,
+        measurements,
+        attachments,
+        related: {
+          similarAlarms,
+          targets: relatedTargets,
+          actionOutcomes: completedPlans.map((plan: Record<string, unknown> & { id: string }) => ({
+            ...plan,
+            tasks: actionTasks.filter((task: { actionPlanId: string }) => task.actionPlanId === plan.id),
+          })),
+        },
+      };
     },
     async listSampleDelayStages(alarmId) {
       return db.select().from(tables.sampleDelayStages).where(eq(tables.sampleDelayStages.alarmId, alarmId)).orderBy(asc(tables.sampleDelayStages.eventAt));

@@ -141,12 +141,30 @@ function createFakeRepository({ failAtomicMutation = false, findTargetBySourceAl
   };
 }
 
-test("alarm handlers return a list and Sample Delay stages in chronological order", async () => {
+test("alarm detail handler returns the requested aggregate", async () => {
   const { createAlarmRouteHandlers, createAlarmDetailRouteHandlers } = await loadHandlers();
-  const repository = createFakeRepository();
+  const aggregate = {
+    alarm: { id: alarmId, alarmCode: "AL-99198", item: "Bearing Housing A1", type: "CPK Drop", process: "Machining" },
+    detail: { alarmId, equipment: "CNC-M-04", productionLot: "LOT-231012-001" },
+    measurements: [{ alarmId, metricName: "CPK", metricValue: "1.12", thresholdValue: "1.33", measuredAt: "2026-08-18T00:00:00.000Z" }],
+    attachments: [{ alarmId, fileName: "cpk-report.pdf", fileSizeBytes: 1024 }],
+    related: {
+      similarAlarms: [{ id: "99198000-0000-4000-8000-000000000010", alarmCode: "AL-99197" }],
+      targets: [{ id: targetId, targetCode: "TRG-10001" }],
+      actionOutcomes: [{ id: actionPlanId, status: "종결", tasks: [{ description: "Inspect tooling" }] }],
+    },
+  };
+  const calls = [];
+  const repository = {
+    async listAlarms() { return [aggregate.alarm]; },
+    async getAlarmDetail(id) {
+      calls.push(id);
+      return id === alarmId ? aggregate : null;
+    },
+  };
 
   const list = await createAlarmRouteHandlers(repository).GET();
-  assert.deepEqual((await list.json()).alarms, [{ id: alarmId, alarmCode: "AL-99198", item: "Bearing Housing A1", type: "Sample Delay" }]);
+  assert.deepEqual((await list.json()).alarms, [aggregate.alarm]);
 
   const detail = await createAlarmDetailRouteHandlers(repository).GET(
     new Request(`http://app.local/api/alarms/${alarmId}`),
@@ -154,7 +172,42 @@ test("alarm handlers return a list and Sample Delay stages in chronological orde
   );
   const body = await detail.json();
   assert.equal(detail.status, 200);
-  assert.deepEqual(body.sampleDelayStages.map((stage) => stage.stageName), ["샘플 의뢰", "시험 접수", "시험 분석 완료", "판정 지연"]);
+  assert.deepEqual(Object.keys(body).sort(), ["alarm", "attachments", "detail", "measurements", "related"]);
+  assert.equal(body.detail.equipment, "CNC-M-04");
+  assert.deepEqual(body.measurements.map((point) => point.alarmId), [alarmId]);
+  assert.deepEqual(body.attachments.map((attachment) => attachment.alarmId), [alarmId]);
+  assert.deepEqual(body.related.targets.map((target) => target.id), [targetId]);
+  assert.deepEqual(calls, [alarmId]);
+});
+
+test("alarm detail handler rejects invalid IDs and guards missing or failed lookups", async () => {
+  const { createAlarmDetailRouteHandlers } = await loadHandlers();
+  const calls = [];
+  const repository = {
+    async getAlarmDetail(id) {
+      calls.push(id);
+      if (id === missingId) return null;
+      throw new Error("DATABASE_URL=postgresql://secret");
+    },
+  };
+  const handlers = createAlarmDetailRouteHandlers(repository);
+
+  const invalid = await handlers.GET(new Request("http://app.local/api/alarms/not-a-uuid"), {
+    params: Promise.resolve({ id: "not-a-uuid" }),
+  });
+  assert.equal(invalid.status, 400);
+  assert.deepEqual(calls, []);
+
+  const missing = await handlers.GET(new Request(`http://app.local/api/alarms/${missingId}`), {
+    params: Promise.resolve({ id: missingId }),
+  });
+  assert.equal(missing.status, 404);
+
+  const failure = await handlers.GET(new Request(`http://app.local/api/alarms/${alarmId}`), {
+    params: Promise.resolve({ id: alarmId }),
+  });
+  assert.equal(failure.status, 500);
+  assert.doesNotMatch(await failure.text(), /DATABASE_URL|postgresql:/i);
 });
 
 test("mutation handlers reject malformed JSON without exposing database details", async () => {

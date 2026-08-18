@@ -125,7 +125,7 @@ export function createQualityRepository(database: unknown, tables: QualityTables
         where ${eq(tables.targets.id, tables.actionPlans.targetId)}
           and ${eq(sql.raw("source_alarm.process"), alarm.process)}
       )`;
-      const [detail, measurements, attachments, sampleDelayStages, similarAlarms, relatedTargets, completedPlans] = await Promise.all([
+      const [detailRows, measurements, attachments, sampleDelayStages, similarAlarms, relatedTargets, completedPlans] = await Promise.all([
         db.select().from(tables.alarmDetails).where(eq(tables.alarmDetails.alarmId, id)).limit(1),
         db.select().from(tables.alarmMeasurements).where(eq(tables.alarmMeasurements.alarmId, id)).orderBy(asc(tables.alarmMeasurements.measuredAt)),
         db.select().from(tables.alarmAttachments).where(eq(tables.alarmAttachments.alarmId, id)).orderBy(desc(tables.alarmAttachments.createdAt)),
@@ -152,7 +152,7 @@ export function createQualityRepository(database: unknown, tables: QualityTables
 
       return {
         alarm,
-        detail: detail ?? null,
+        detail: detailRows[0] ?? null,
         measurements,
         attachments,
         sampleDelayStages,

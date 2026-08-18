@@ -798,6 +798,68 @@ test("repository lists action plans with their tasks for the selected relation",
   assert.deepEqual(await repository.listActionPlans({ targetId }), [{ ...plans[0], tasks }]);
 });
 
+test("repository returns one scoped alarm-detail record or null", async () => {
+  const { createQualityRepository } = await import("../lib/quality-repository.ts");
+  const tables = await import("../db/schema.ts");
+  const selectedAlarm = { id: alarmId, type: "CPK Drop", process: "Machining" };
+  const detail = { id: "detail-1", alarmId, equipment: "CNC-M-04" };
+  const measurement = { id: "measurement-1", alarmId, metricName: "CPK" };
+  const attachment = { id: "attachment-1", alarmId, fileName: "cpk-report.pdf" };
+  const foreignMeasurement = { id: "measurement-2", alarmId: missingId, metricName: "CPK" };
+  const foreignAttachment = { id: "attachment-2", alarmId: missingId, fileName: "other-report.pdf" };
+  const whereCalls = [];
+  let alarmReads = 0;
+  let detailRows = [detail];
+  const includesSelectedId = (value, seen = new Set()) => {
+    if (value === alarmId) return true;
+    if (!value || typeof value !== "object" || seen.has(value)) return false;
+    seen.add(value);
+    return Object.values(value).some((entry) => includesSelectedId(entry, seen));
+  };
+  const fakeDb = {
+    select() {
+      return {
+        from(table) {
+          const rowsFor = (condition) => {
+            if (table === tables.alarms) return alarmReads++ === 0 ? [selectedAlarm] : [];
+            if (table === tables.alarmDetails) return detailRows;
+            if (table === tables.alarmMeasurements) return includesSelectedId(condition) ? [measurement] : [measurement, foreignMeasurement];
+            if (table === tables.alarmAttachments) return includesSelectedId(condition) ? [attachment] : [attachment, foreignAttachment];
+            return [];
+          };
+          return {
+            where(condition) {
+              whereCalls.push({ table, condition });
+              const result = rowsFor(condition);
+              return {
+                limit() { return result; },
+                orderBy() {
+                  return [tables.alarms, tables.targets, tables.actionPlans].includes(table)
+                    ? { limit() { return result; } }
+                    : result;
+                },
+              };
+            },
+          };
+        },
+      };
+    },
+  };
+  const repository = createQualityRepository(fakeDb, tables);
+
+  const aggregate = await repository.getAlarmDetail(alarmId);
+  assert.deepEqual(aggregate.detail, detail);
+  assert.deepEqual(aggregate.measurements, [measurement]);
+  assert.deepEqual(aggregate.attachments, [attachment]);
+  assert.ok(whereCalls.some((call) => call.table === tables.alarmMeasurements && includesSelectedId(call.condition)));
+  assert.ok(whereCalls.some((call) => call.table === tables.alarmAttachments && includesSelectedId(call.condition)));
+
+  detailRows = [];
+  alarmReads = 0;
+  const withoutDetail = await repository.getAlarmDetail(alarmId);
+  assert.equal(withoutDetail.detail, null);
+});
+
 test("repository persists master data and alarm updates in audited batches", async () => {
   const { createQualityRepository } = await import("../lib/quality-repository.ts");
   const batches = [];

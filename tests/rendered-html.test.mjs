@@ -395,9 +395,9 @@ test("uses an accessible related-information accordion and sample-delay workflow
   const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
   const alarmDrawer =
-    page.match(/function AlarmDrawer\([\s\S]*?\n}\n\nconst relatedInfo =/)?.[0] ?? "";
+    page.match(/function AlarmDrawer\([\s\S]*?\r?\n}\r?\n\r?\nfunction RelatedInfoAccordion/)?.[0] ?? "";
   const relatedAccordion =
-    page.match(/function RelatedInfoAccordion\(\)[\s\S]*?\r?\n}\r?\n\r?\nfunction SampleDelayDrawer/)?.[0] ?? "";
+    page.match(/function RelatedInfoAccordion\([\s\S]*?\r?\n}\r?\n\r?\nfunction SampleDelayDrawer/)?.[0] ?? "";
   const sampleDelayDrawer =
     page.match(/function SampleDelayDrawer\([\s\S]*?\r?\n}\r?\n\r?\nfunction NewCase/)?.[0] ?? "";
 
@@ -423,6 +423,24 @@ test("uses an accessible related-information accordion and sample-delay workflow
   assert.match(sampleDelayDrawer, /<span>\{sampleDelaySummary\.overageMinutes\}분<\/span>/);
   assert.match(css, /\.related-info-control/);
   assert.match(css, /\.sample-delay-stage\.delay/);
+});
+
+test("loads selected alarm detail data and avoids fabricated drawer values", async () => {
+  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const alarmDrawer = page.match(/function AlarmDrawer\([\s\S]*?\r?\n}\r?\n\r?\nfunction RelatedInfoAccordion/)?.[0] ?? "";
+
+  assert.match(page, /const \[alarmDetail, setAlarmDetail\] = useState<AlarmDetailResponse \| null>\(null\)/);
+  assert.match(page, /const \[alarmDetailLoading, setAlarmDetailLoading\] = useState\(false\)/);
+  assert.match(page, /const \[alarmDetailError, setAlarmDetailError\] = useState<string \| null>\(null\)/);
+  assert.match(page, /selectedAlarmIdRef\.current === selectedId/);
+  assert.match(page, /상세 데이터를 불러오는 중/);
+  assert.match(page, /등록된 상세 데이터가 없습니다/);
+  assert.match(page, /상세 데이터를 불러오지 못했습니다/);
+  assert.match(alarmDrawer, /detail\?\.equipment/);
+  assert.match(alarmDrawer, /detail\?\.productionLot/);
+  assert.doesNotMatch(alarmDrawer, /<strong>CNC-M-04<\/strong>/);
+  assert.doesNotMatch(alarmDrawer, /<strong>LOT-231012-001<\/strong>/);
+  assert.doesNotMatch(alarmDrawer, /5,000 \/ 100/);
 });
 
 test("splits master tabs into distinct editable rule and code management surfaces", async () => {

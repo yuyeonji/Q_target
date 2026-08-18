@@ -65,6 +65,55 @@ export type SampleDelayStage = {
   isDelayed: boolean;
 };
 
+export type AlarmDetail = {
+  alarmId: string;
+  equipment?: string | null;
+  productionLot?: string | null;
+  measurementSummary?: string | null;
+  currentValue?: string | null;
+  thresholdValue?: string | null;
+  affectedProductsCustomers?: string | null;
+  producedQuantity?: number | null;
+  inspectedQuantity?: number | null;
+  nonconformingQuantity?: number | null;
+  shippingStatus?: string | null;
+  inventoryQuantity?: number | null;
+  relatedCtq?: string | null;
+  processFactor?: string | null;
+};
+
+export type AlarmMeasurement = {
+  alarmId: string;
+  metricName: string;
+  metricValue?: string | null;
+  thresholdValue?: string | null;
+  measuredAt: string;
+};
+
+export type AlarmAttachment = {
+  alarmId: string;
+  fileName: string;
+  fileUrl?: string | null;
+  fileSizeBytes?: number | null;
+  createdAt?: string | null;
+};
+
+type RelatedAlarm = Pick<PersistedAlarm, "id" | "alarmCode" | "item" | "type" | "process" | "line" | "status" | "occurredAt">;
+type RelatedTarget = Pick<PersistedTarget, "id" | "targetCode" | "name" | "status" | "owner" | "priority" | "dueDate">;
+type RelatedActionOutcome = PersistedActionPlan & { createdAt?: string | null };
+
+export type AlarmDetailResponse = {
+  alarm: PersistedAlarm;
+  detail: AlarmDetail | null;
+  measurements: AlarmMeasurement[];
+  attachments: AlarmAttachment[];
+  related: {
+    similarAlarms: RelatedAlarm[];
+    targets: RelatedTarget[];
+    actionOutcomes: RelatedActionOutcome[];
+  };
+};
+
 export type ActionPlanInput = {
   alarmId?: string | null;
   targetId?: string | null;
@@ -140,8 +189,8 @@ export async function listAlarms() {
   return response.alarms;
 }
 
-export async function getAlarmDetail(id: string) {
-  return request<{ alarm: PersistedAlarm; sampleDelayStages: SampleDelayStage[] }>(`/api/alarms/${encodeURIComponent(id)}`, { method: "GET" });
+export async function getAlarmDetail(id: string): Promise<AlarmDetailResponse> {
+  return request<AlarmDetailResponse>(`/api/alarms/${encodeURIComponent(id)}`, { method: "GET" });
 }
 
 export async function listTargets() {

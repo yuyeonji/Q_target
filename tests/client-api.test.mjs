@@ -214,17 +214,26 @@ test("helpers return safe errors without server details", async () => {
   });
 });
 
-test("Sample Delay detail uses an encoded alarm path and preserves the API stage order", async () => {
-  const stages = [
-    { stageName: "샘플 의뢰", eventAt: "2023-10-12T08:00:00Z", elapsedMinutes: 0, allowedMinutes: 60, isDelayed: false },
-    { stageName: "판정 지연", eventAt: "2023-10-12T12:20:00Z", elapsedMinutes: 100, allowedMinutes: 60, isDelayed: true },
-  ];
-  await withFetch(new Response(JSON.stringify({ alarm: { id: "AL / 1" }, sampleDelayStages: stages }), { status: 200 }), async (calls) => {
+test("alarm detail uses an encoded alarm path and returns the complete aggregate", async () => {
+  const aggregate = {
+    alarm: { id: "AL / 1", alarmCode: "AL-99198", occurredAt: "2023-10-12T08:00:00Z", item: "Bearing Housing A1", type: "CPK Drop", process: "Machining", line: "Line 4", status: "긴급" },
+    detail: { alarmId: "AL / 1", equipment: "CNC-M-05", productionLot: "LOT-231012-005", currentValue: "1.18", thresholdValue: "1.33" },
+    measurements: [{ alarmId: "AL / 1", metricName: "CPK", metricValue: "1.18", thresholdValue: "1.33", measuredAt: "2023-10-12T08:00:00Z" }],
+    attachments: [{ alarmId: "AL / 1", fileName: "cpk-report.pdf", fileSizeBytes: 1024 }],
+    related: { similarAlarms: [], targets: [], actionOutcomes: [] },
+  };
+  await withFetch(new Response(JSON.stringify(aggregate), { status: 200 }), async (calls) => {
     const detail = await client.getAlarmDetail("AL / 1");
     assert.equal(calls[0][0], "/api/alarms/AL%20%2F%201");
-    assert.deepEqual(detail.sampleDelayStages.map((stage) => stage.stageName), ["샘플 의뢰", "판정 지연"]);
+    assert.equal(detail.detail?.equipment, "CNC-M-05");
+    assert.deepEqual(detail.measurements.map((point) => point.alarmId), ["AL / 1"]);
+    assert.deepEqual(detail.attachments.map((attachment) => attachment.fileName), ["cpk-report.pdf"]);
+    assert.deepEqual(detail.related, aggregate.related);
   });
 
-  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
-  assert.match(page, /const sampleDelaySummary = persistedStages\?\.length/);
+  const source = await readFile(new URL("../lib/client-api.ts", import.meta.url), "utf8");
+  assert.match(source, /export type AlarmDetail =/);
+  assert.match(source, /export type AlarmMeasurement =/);
+  assert.match(source, /export type AlarmAttachment =/);
+  assert.match(source, /export type AlarmDetailResponse =/);
 });

@@ -2836,12 +2836,9 @@ function SampleDelayDrawer({
                 </div>
                 {sampleDelaySummary && (
                   <div className="sample-delay-summary">
-                    <b>경과 시간</b>
-                    <span>{sampleDelaySummary.elapsedMinutes}분</span>
-                    <b>허용 기준</b>
-                    <span>{sampleDelaySummary.allowedMinutes}분</span>
-                    <b>초과 시간</b>
-                    <span>{sampleDelaySummary.overageMinutes}분</span>
+                    <p className="sample-delay-summary-item"><b>경과 시간</b><span>{sampleDelaySummary.elapsedMinutes}분</span></p>
+                    <p className="sample-delay-summary-item"><b>허용 기준</b><span>{sampleDelaySummary.allowedMinutes}분</span></p>
+                    <p className="sample-delay-summary-item"><b>초과 시간</b><span>{sampleDelaySummary.overageMinutes}분</span></p>
                   </div>
                 )}
                 <ul className="sample-delay-durations">

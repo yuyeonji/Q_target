@@ -417,6 +417,7 @@ test("uses an accessible related-information accordion and sample-delay workflow
   assert.match(page, /초과 시간/);
   assert.match(sampleDelayDrawer, /const stages = persistedStages\?\.map/);
   assert.match(sampleDelayDrawer, /const sampleDelaySummary = stages\.length/);
+  assert.match(sampleDelayDrawer, /className="sample-delay-summary-item"/);
   assert.match(sampleDelayDrawer, /overageMinutes: Math\.max\(0, latestStage\.elapsedMinutes - latestStage\.allowedMinutes\)/);
   assert.match(sampleDelayDrawer, /등록된 샘플 지연 단계 데이터가 없습니다/);
   assert.match(sampleDelayDrawer, /const stageDataLoaded = detail\?\.alarm\.id === alarm\.id/);

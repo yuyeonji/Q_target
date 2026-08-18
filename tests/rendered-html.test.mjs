@@ -497,7 +497,7 @@ test("opens a target action-plan popup even when loading its persisted plan fail
 
   assert.match(
     openTargetActionPlan,
-    /setActionPlan\(true\);[\s\S]*?await reloadActionPlan\(\{ targetId: target\.id \}\);/,
+    /setActionPlan\(true\);[\s\S]*?reloadActionPlan\(\{ targetId: target\.id \}\)/,
   );
 });
 
@@ -576,6 +576,19 @@ test("renders closed action plans as read-only and accepts concise real closure 
   assert.match(actionPlan, /isMeaningful\(immediateAction\)/);
   assert.match(actionPlan, /isMeaningful\(preventiveAction\)/);
   assert.doesNotMatch(actionPlan, /trim\(\)\.length < 10/);
+});
+
+test("loads and renders the selected target's source alarm details in action plans", async () => {
+  const pageSource = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const openTargetActionPlan = pageSource.match(/const openTargetActionPlan = async \(target: Target\) => \{[\s\S]*?\n  \};/)?.[0] ?? "";
+  const actionPlan = pageSource.match(/function ActionPlan\([\s\S]*?\r?\n}\r?\n\r?\nfunction QuickPanel/)?.[0] ?? "";
+
+  assert.match(pageSource, /const \[actionPlanAlarmDetail, setActionPlanAlarmDetail\] = useState<AlarmDetailResponse \| null>\(null\)/);
+  assert.match(openTargetActionPlan, /getAlarmDetail\(target\.sourceAlarmId\)/);
+  assert.match(actionPlan, /<ActionPlanAlarmDetails/);
+  assert.match(pageSource, /function ActionPlanAlarmDetails/);
+  assert.match(pageSource, /alarm\.type === "Sample Delay" \|\| alarm\.type === "검사접수 지연"/);
+  assert.doesNotMatch(actionPlan, /압출기 3호기 비정상 진동/);
 });
 
 test("limits standard alarm detail measurements to comparison cards", async () => {

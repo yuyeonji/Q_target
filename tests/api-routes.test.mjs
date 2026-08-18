@@ -798,6 +798,27 @@ test("repository lists action plans with their tasks for the selected relation",
   assert.deepEqual(await repository.listActionPlans({ targetId }), [{ ...plans[0], tasks }]);
 });
 
+test("target creation uses the linked alarm item as the target name", async () => {
+  const { createTargetRouteHandlers } = await loadHandlers();
+  const repository = createFakeRepository();
+
+  const response = await createTargetRouteHandlers(repository).POST(new Request("http://app.local/api/targets", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      name: "outdated client-side name",
+      sourceAlarmId: alarmId,
+      status: "in progress",
+      owner: "unassigned",
+      priority: "normal",
+    }),
+  }));
+
+  assert.equal(response.status, 201);
+  assert.equal(repository.savedTargets[0].name, "Bearing Housing A1");
+  assert.equal(repository.auditEvents[0].details.name, "Bearing Housing A1");
+});
+
 test("repository returns one scoped alarm-detail record or null", async () => {
   const { createQualityRepository } = await import("../lib/quality-repository.ts");
   const tables = await import("../db/schema.ts");

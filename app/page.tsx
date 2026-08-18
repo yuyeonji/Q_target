@@ -321,6 +321,8 @@ export default function Home() {
   const [actionPlan, setActionPlan] = useState(false);
   const [actionPlanLoading, setActionPlanLoading] = useState(false);
   const [actionPlanAlarmId, setActionPlanAlarmId] = useState<string | null>(null);
+  const [actionPlanAlarmDetail, setActionPlanAlarmDetail] = useState<AlarmDetailResponse | null>(null);
+  const [actionPlanAlarmDetailLoading, setActionPlanAlarmDetailLoading] = useState(false);
   const [persistedActionPlan, setPersistedActionPlan] = useState<PersistedActionPlan | null>(null);
   const actionPlanRelationRef = useRef<string | null>(null);
   const [newCase, setNewCase] = useState(false);
@@ -638,6 +640,8 @@ export default function Home() {
     actionPlanRelationRef.current = `target:${target.id}`;
     setSelectedTarget(target);
     setActionPlanAlarmId(target.sourceAlarmId ?? null);
+    setActionPlanAlarmDetail(null);
+    setActionPlanAlarmDetailLoading(Boolean(target.sourceAlarmId));
     setPersistedActionPlan(null);
     setTasks([]);
     setNewTask("");
@@ -646,11 +650,21 @@ export default function Home() {
     setActionPlanLoading(true);
     setActionPlan(true);
     try {
-      await reloadActionPlan({ targetId: target.id });
+      const [planResult, detailResult] = await Promise.allSettled([
+        reloadActionPlan({ targetId: target.id }),
+        target.sourceAlarmId ? getAlarmDetail(target.sourceAlarmId) : Promise.resolve(null),
+      ]);
+      if (planResult.status === "rejected") throw planResult.reason;
+      if (detailResult.status === "fulfilled" && actionPlanRelationRef.current === `target:${target.id}`) {
+        setActionPlanAlarmDetail(detailResult.value);
+      }
     } catch {
       showNotice("저장된 조치계획을 불러오지 못했습니다. 새 조치계획을 작성할 수 있습니다.");
     } finally {
-      if (actionPlanRelationRef.current === `target:${target.id}`) setActionPlanLoading(false);
+      if (actionPlanRelationRef.current === `target:${target.id}`) {
+        setActionPlanLoading(false);
+        setActionPlanAlarmDetailLoading(false);
+      }
     }
   };
 
@@ -934,6 +948,8 @@ export default function Home() {
           key={`${selectedTarget?.id ?? actionPlanAlarmId ?? "new"}:${persistedActionPlan?.id ?? "empty"}`}
           persistenceReady={persistenceReady}
           initialPlan={persistedActionPlan}
+          alarmDetail={actionPlanAlarmDetail}
+          alarmDetailLoading={actionPlanAlarmDetailLoading}
           targetName={selectedTarget?.name ?? "설비 비정상 진동 발생"}
           tasks={tasks}
           newTask={newTask}
@@ -2992,8 +3008,96 @@ function NewCase({
   );
 }
 
+function ActionPlanAlarmDetails({
+  alarmDetail,
+  loading,
+}: {
+  alarmDetail: AlarmDetailResponse | null;
+  loading: boolean;
+}) {
+  if (loading) return <p role="status">연결된 알람 상세 정보를 불러오는 중입니다.</p>;
+  if (!alarmDetail) return <p role="status">연결된 알람 상세 정보를 찾을 수 없습니다.</p>;
+
+  const { alarm, detail } = alarmDetail;
+  const measurements = alarmDetail.measurements;
+  const latestMeasurement = measurements.at(-1);
+  const metricName = latestMeasurement?.metricName ?? "측정 값";
+  const isSampleDelayAlarm = alarm.type === "Sample Delay" || alarm.type === "검사접수 지연";
+
+  if (isSampleDelayAlarm) {
+    const stages = alarmDetail.sampleDelayStages ?? [];
+    const latestStage = [...stages].reverse().find((stage) => Number.isFinite(stage.elapsedMinutes) && Number.isFinite(stage.allowedMinutes));
+    const overage = latestStage ? Math.max(0, latestStage.elapsedMinutes - latestStage.allowedMinutes) : null;
+    return (
+      <section>
+        <h3>샘플 지연 워크플로우</h3>
+        {stages.length ? (
+          <>
+            <div className="sample-delay-workflow">
+              {stages.map((stage) => {
+                const delayed = stage.isDelayed || stage.elapsedMinutes > stage.allowedMinutes;
+                return (
+                  <article className={delayed ? "sample-delay-stage delay" : "sample-delay-stage"} key={stage.stageName}>
+                    <b>{stage.stageName}</b>
+                    <span>시간 {new Date(stage.eventAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}</span>
+                    <span>경과 {stage.elapsedMinutes}분</span>
+                    {delayed && <strong>지연 상태</strong>}
+                  </article>
+                );
+              })}
+            </div>
+            {latestStage && (
+              <div className="sample-delay-summary">
+                <p className="sample-delay-summary-item"><b>경과 시간</b><span>{latestStage.elapsedMinutes}분</span></p>
+                <p className="sample-delay-summary-item"><b>허용 기준</b><span>{latestStage.allowedMinutes}분</span></p>
+                <p className="sample-delay-summary-item"><b>초과 시간</b><span>{overage}분</span></p>
+              </div>
+            )}
+          </>
+        ) : <p>등록된 샘플 지연 단계 데이터가 없습니다.</p>}
+      </section>
+    );
+  }
+
+  return (
+    <>
+      <section>
+        <h3>알람 기본 정보</h3>
+        <div className="info-grid">
+          <p>알람 번호<strong>{alarm.alarmCode}</strong></p>
+          <p>발생 일시<strong>{new Date(alarm.occurredAt).toLocaleString("ko-KR")}</strong></p>
+          <p>유형<strong>{alarm.type}</strong></p>
+          <p>제품<strong>{alarm.item}</strong></p>
+          <p>공정/라인<strong>{alarm.process} / {alarm.line}</strong></p>
+          <p>설비<strong>{detail?.equipment ?? noDetailMessage}</strong></p>
+          <p>생산 LOT<strong>{detail?.productionLot ?? noDetailMessage}</strong></p>
+          <p>검토 기한<strong className="red-text">{alarm.reviewDeadline ? new Date(alarm.reviewDeadline).toLocaleString("ko-KR") : noDetailMessage}</strong></p>
+        </div>
+      </section>
+      <section>
+        <h3>상세 수치 및 기준 비교</h3>
+        <div className="measurements">
+          <article>
+            <b>현재 값 vs 기준 값</b>
+            <p>현재 값<strong className="red-text">{formatDetailValue(detail?.currentValue ?? latestMeasurement?.metricValue)}</strong></p>
+            <p>목표 값<strong>{formatDetailValue(detail?.thresholdValue ?? latestMeasurement?.thresholdValue)}</strong></p>
+          </article>
+          <article>
+            <b>{metricName} 비교 추이</b>
+            <p>30일<strong className="red-text">{formatDetailValue(measurementAverage(measurements, 30))}</strong></p>
+            <p>3개월<strong>{formatDetailValue(measurementAverage(measurements, 90))}</strong></p>
+            <p>3년<strong>{formatDetailValue(measurementAverage(measurements, 365 * 3))}</strong></p>
+          </article>
+        </div>
+      </section>
+    </>
+  );
+}
+
 function ActionPlan({
   initialPlan,
+  alarmDetail,
+  alarmDetailLoading,
   targetName,
   tasks,
   newTask,
@@ -3011,6 +3115,8 @@ function ActionPlan({
   persistenceReady,
 }: {
   initialPlan: PersistedActionPlan | null;
+  alarmDetail: AlarmDetailResponse | null;
+  alarmDetailLoading: boolean;
   targetName: string;
   tasks: Task[];
   newTask: string;
@@ -3143,30 +3249,7 @@ function ActionPlan({
           <p>Target ID: TGT-2023-1049 | {targetName}</p>
           {isClosed && <p role="status">종결된 조치계획은 읽기 전용입니다. 재개할 수 없습니다.</p>}
           <ValidationSummary errors={closeErrors} title="종결 전에 다음 항목을 확인하세요." />
-          <section>
-            <h3>🔔 알람 상세 정보 (Alarm Details)</h3>
-            <div className="alarm-summary">
-              <div>
-                <b>항목명</b>
-                <br />
-                압출기 3호기 비정상 진동
-                <br />
-                <b className="red-text">높음 (High)</b>
-              </div>
-              <div>
-                <b>측정 데이터</b>
-                <p>
-                  현재값 <strong className="red-text">3.82</strong> 기준값{" "}
-                  <strong>2.50</strong>
-                </p>
-                <small>발생일시 2023-11-20 14:22:05</small>
-              </div>
-              <div>
-                <b>최근 30일 발생 추이</b>
-                <MiniBars />
-              </div>
-            </div>
-          </section>
+          <ActionPlanAlarmDetails alarmDetail={alarmDetail} loading={alarmDetailLoading} />
           <section>
             <h3>🟣 원인 분석</h3>
             <div className="textareas">

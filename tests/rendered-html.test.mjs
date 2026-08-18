@@ -574,3 +574,9 @@ test("renders closed action plans as read-only and accepts concise real closure 
   assert.match(actionPlan, /isMeaningful\(preventiveAction\)/);
   assert.doesNotMatch(actionPlan, /trim\(\)\.length < 10/);
 });
+
+test("keeps alarm detail measurement cards evenly sized beside a 30-day trend", async () => {
+  const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+
+  assert.match(css, /\.measurements\{[^}]*grid-template-columns:\s*repeat\(3,minmax\(0,1fr\)\)/);
+});

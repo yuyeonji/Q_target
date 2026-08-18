@@ -2533,26 +2533,6 @@ function measurementAverage(measurements: AlarmDetailResponse["measurements"], d
   return (values.reduce((total, value) => total + value, 0) / values.length).toFixed(2);
 }
 
-function MeasurementLineChart({ measurements, emptyMessage }: { measurements: AlarmDetailResponse["measurements"]; emptyMessage: string }) {
-  const values = measurements.slice(-30).map((measurement) => Number(measurement.metricValue)).filter(Number.isFinite);
-  if (!values.length) return <p>{emptyMessage}</p>;
-  const threshold = Number(measurements.at(-1)?.thresholdValue);
-  const domain = Number.isFinite(threshold) ? [...values, threshold] : values;
-  const chartMin = Math.min(...domain);
-  const chartMax = Math.max(...domain);
-  const chartRange = chartMax - chartMin || 1;
-  const pointY = (value: number) => 36 - ((value - chartMin) / chartRange) * 30;
-  const points = values.map((value, index) => `${(index / Math.max(values.length - 1, 1)) * 100},${pointY(value)}`).join(" ");
-  const thresholdY = Number.isFinite(threshold) ? pointY(threshold) : null;
-  return (
-    <svg className="measurement-line-chart" viewBox="0 0 100 40" preserveAspectRatio="none" role="img" aria-label="최근 30일 측정 추이">
-      {thresholdY !== null && <line className="measurement-threshold" x1="0" x2="100" y1={thresholdY} y2={thresholdY} />}
-      <polyline className="measurement-line" points={points} />
-      <circle className="measurement-latest" cx="100" cy={pointY(values.at(-1)!)} r="1.8" />
-    </svg>
-  );
-}
-
 function AlarmDrawer({
   alarm,
   detail: response,
@@ -2634,7 +2614,6 @@ function AlarmDrawer({
           </section>
           <section>
             <h3>상세 수치 및 기준 비교</h3>
-            <p>{detail?.measurementSummary ?? emptyDetailValue}</p>
             <div className="measurements">
               <article>
                 <b>현재 값 vs 기준 값</b>
@@ -2656,10 +2635,6 @@ function AlarmDrawer({
                 <p>
                   3년 <strong>{formatDetailValue(measurementAverage(measurements, 365 * 3))}</strong>
                 </p>
-              </article>
-              <article>
-                <b>최근 30일 추세</b>
-                <MeasurementLineChart measurements={measurements} emptyMessage={detailLoaded ? noDetailMessage : "-"} />
               </article>
             </div>
           </section>

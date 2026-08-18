@@ -578,12 +578,12 @@ test("renders closed action plans as read-only and accepts concise real closure 
   assert.doesNotMatch(actionPlan, /trim\(\)\.length < 10/);
 });
 
-test("keeps alarm detail measurement cards evenly sized beside a 30-day trend", async () => {
+test("limits standard alarm detail measurements to comparison cards", async () => {
   const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
+  const alarmDrawer = page.match(/function AlarmDrawer\([\s\S]*?\r?\n}\r?\n\r?\nfunction SampleDelayDrawer/)?.[0] ?? "";
 
-  assert.match(css, /\.measurements\{[^}]*grid-template-columns:\s*repeat\(3,minmax\(0,1fr\)\)/);
-  assert.match(page, /function MeasurementLineChart/);
-  assert.match(page, /<polyline/);
-  assert.match(page, /className="measurement-line-chart"/);
+  assert.match(css, /\.measurements\{[^}]*grid-template-columns:\s*repeat\(2,minmax\(0,1fr\)\)/);
+  assert.doesNotMatch(alarmDrawer, /MeasurementLineChart/);
+  assert.doesNotMatch(page, /function MeasurementLineChart/);
 });

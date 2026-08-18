@@ -93,3 +93,23 @@ remains a separate user-approved operation.
 Tests cover schema constraints, endpoint response and missing-data behavior,
 and rendered drawer behavior. Verification also includes a production build
 and the existing test suite.
+
+## Local Validation and Migration Handoff
+
+Run the complete local verification from the repository root:
+
+```powershell
+node --test tests/*.test.mjs; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; npx vinext build
+```
+
+**User-owned Neon migration:** after separately approving the target Neon
+branch and supplying its connection string only through the local environment,
+run this command from the repository root:
+
+```powershell
+$env:DATABASE_URL = "<approved Neon connection string>"; npx drizzle-kit migrate
+```
+
+This applies the journaled `drizzle/0008_alarm_detail_data.sql` migration along
+with any earlier pending migrations. Automated tests and Render deployment do
+not apply this migration, and no automated workflow changes the Neon database.

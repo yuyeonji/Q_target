@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 
 const handlers = await import("../lib/route-handlers.mjs");
@@ -149,4 +150,40 @@ test("production TypeScript modules use extensionless local imports", async () =
   ]);
   assert.doesNotMatch(repository, /from\s+["'][^"']+\.ts["']/);
   assert.doesNotMatch(db, /from\s+["'][^"']+\.ts["']/);
+});
+
+test("alarm detail integration ships a migration, aggregate route, and no drawer examples", async () => {
+  const [routeHandlers, page] = await Promise.all([
+    readFile(new URL("../lib/route-handlers.mjs", import.meta.url), "utf8"),
+    readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
+  ]);
+
+  assert.ok(existsSync(new URL("../drizzle/0008_alarm_detail_data.sql", import.meta.url)));
+  assert.match(routeHandlers, /repository\.getAlarmDetail\(id\)/);
+
+  const alarmDrawer = page.match(/function AlarmDrawer\([\s\S]*?\r?\n}\r?\n\r?\nfunction RelatedInfoAccordion/)?.[0] ?? "";
+  const relatedInfo = page.match(/function RelatedInfoAccordion\([\s\S]*?\r?\n}\r?\n\r?\nfunction SampleDelayDrawer/)?.[0] ?? "";
+
+  assert.match(alarmDrawer, /detail\?\.measurementSummary/);
+  assert.match(alarmDrawer, /detail\?\.affectedProductsCustomers/);
+  assert.match(relatedInfo, /detail\?\.related\.similarAlarms/);
+  for (const formerExample of [
+    "CPK 값이 1.33 임계값 미만으로 하락했습니다.",
+    "30일 CPK 1.12 / 기준 1.33 / 최근 7일 중 4회 발생",
+    "CNC-M-04",
+    "LOT-231012-001",
+    "제품 A, B / 주요 고객사 X",
+    "출하 대기 / 재고 2,000",
+    "온도 편차, 절삭 공구 마모",
+  ]) {
+    assert.doesNotMatch(alarmDrawer, new RegExp(formerExample.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  }
+  for (const formerRelatedExample of [
+    "최근 30일 내 같은 설비에서 3건의 유사 알람이 발생했습니다.",
+    "TRG-8841 · 2023-09-18 · 조치 완료",
+    "베어링 교체 후 CPK가 1.42까지 회복되었습니다.",
+    "측정 데이터.csv · 42KB",
+  ]) {
+    assert.doesNotMatch(relatedInfo, new RegExp(formerRelatedExample.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  }
 });

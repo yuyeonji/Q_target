@@ -2778,40 +2778,32 @@ function SampleDelayDrawer({
   onAction: () => void;
   persistenceReady: boolean;
 }) {
-  const fallbackSummary = { elapsedMinutes: 68, allowedMinutes: 30, overageMinutes: 38 };
-  const sampleDelaySummary = persistedStages?.length
+  const stages = persistedStages?.map((stage) => {
+    const eventAt = new Date(stage.eventAt);
+    const elapsedMinutes = Number.isFinite(stage.elapsedMinutes) ? Math.max(0, Number(stage.elapsedMinutes)) : null;
+    const allowedMinutes = Number.isFinite(stage.allowedMinutes) ? Math.max(0, Number(stage.allowedMinutes)) : null;
+    return {
+      name: stage.stageName || "단계 정보 없음",
+      time: Number.isNaN(eventAt.getTime()) ? "-" : eventAt.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" }),
+      elapsed: elapsedMinutes === null ? "-" : `${elapsedMinutes}분`,
+      elapsedMinutes,
+      allowedMinutes,
+      delay: stage.isDelayed === true || (elapsedMinutes !== null && allowedMinutes !== null && elapsedMinutes > allowedMinutes),
+    };
+  }) ?? [];
+  const sampleDelaySummary = stages.length
     ? (() => {
-        const latestStage = [...persistedStages]
-          .reverse()
-          .find((stage) => Number.isFinite(stage.elapsedMinutes) && Number.isFinite(stage.allowedMinutes));
-        if (!latestStage) return fallbackSummary;
-        const elapsedMinutes = Math.max(0, Number(latestStage.elapsedMinutes));
-        const allowedMinutes = Math.max(0, Number(latestStage.allowedMinutes));
+        const latestStage = [...stages].reverse().find((stage) => stage.elapsedMinutes !== null && stage.allowedMinutes !== null);
+        if (!latestStage || latestStage.elapsedMinutes === null || latestStage.allowedMinutes === null) return null;
         return {
-          elapsedMinutes,
-          allowedMinutes,
-          overageMinutes: Math.max(0, elapsedMinutes - allowedMinutes),
+          elapsedMinutes: latestStage.elapsedMinutes,
+          allowedMinutes: latestStage.allowedMinutes,
+          overageMinutes: Math.max(0, latestStage.elapsedMinutes - latestStage.allowedMinutes),
         };
       })()
-    : fallbackSummary;
-  const stages = persistedStages?.length
-    ? persistedStages.map((stage) => {
-        const eventAt = new Date(stage.eventAt);
-        const elapsedMinutes = Number.isFinite(stage.elapsedMinutes) ? Math.max(0, Number(stage.elapsedMinutes)) : null;
-        const allowedMinutes = Number.isFinite(stage.allowedMinutes) ? Math.max(0, Number(stage.allowedMinutes)) : null;
-        return {
-          name: stage.stageName || "단계 정보 없음",
-          time: Number.isNaN(eventAt.getTime()) ? "-" : eventAt.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" }),
-          elapsed: elapsedMinutes === null ? "-" : `${elapsedMinutes}분`,
-          delay: stage.isDelayed === true || (elapsedMinutes !== null && allowedMinutes !== null && elapsedMinutes > allowedMinutes),
-        };
-      })
-    : [
-    { name: "샘플 의뢰", time: "10:00", elapsed: "0분" },
-    { name: "시험 접수", time: "10:12", elapsed: "12분" },
-    { name: "시험 분석 완료", time: "10:38", elapsed: "38분" },
-    { name: "판정 지연", time: "11:08", elapsed: "68분", delay: true },
-    ];
+    : null;
+  const stageDataLoaded = detail?.alarm.id === alarm.id;
+  const hasStageData = stageDataLoaded && stages.length > 0;
   return (
     <div className="overlay">
       <aside className="drawer">
@@ -2823,43 +2815,45 @@ function SampleDelayDrawer({
           <h2>{alarm.item}</h2>
           {detailLoading && <p role="status">상세 데이터를 불러오는 중입니다.</p>}
           {detailError && <p role="alert">{detailError} <button type="button" onClick={onRetryDetail}>다시 시도</button></p>}
-          {!detailLoading && !detailError && detail?.alarm.id === alarm.id && !detail.detail && <p>{noDetailMessage}</p>}
-          <p className="red-text">판정 지연: 허용 기준을 38분 초과했습니다.</p>
-          <section>
-            <h3>샘플 지연 워크플로</h3>
-            <div className="sample-delay-workflow">
-              {stages.map((stage) => (
-                <article
-                  className={
-                    stage.delay
-                      ? "sample-delay-stage delay"
-                      : "sample-delay-stage"
-                  }
-                  key={stage.name}
-                >
-                  <b>{stage.name}</b>
-                  <span>시간 {stage.time}</span>
-                  <span>경과 {stage.elapsed}</span>
-                  {stage.delay && <strong>지연 상태</strong>}
-                </article>
-              ))}
-            </div>
-            <div className="sample-delay-summary">
-              <b>경과 시간</b>
-              <span>{sampleDelaySummary.elapsedMinutes}분</span>
-              <b>허용 기준</b>
-              <span>{sampleDelaySummary.allowedMinutes}분</span>
-              <b>초과 시간</b>
-              <span>{sampleDelaySummary.overageMinutes}분</span>
-            </div>
-            <ul className="sample-delay-durations">
-              {stages.map((stage) => (
-                <li key={stage.name}>
-                  {stage.name}: {stage.elapsed}
-                </li>
-              ))}
-            </ul>
-          </section>
+          {!detailLoading && !detailError && stageDataLoaded && stages.length === 0 && <p>등록된 샘플 지연 단계 데이터가 없습니다.</p>}
+          {hasStageData && (
+            <>
+              {sampleDelaySummary && <p className="red-text">판정 지연: 허용 기준을 {sampleDelaySummary.overageMinutes}분 초과했습니다.</p>}
+              <section>
+                <h3>샘플 지연 워크플로</h3>
+                <div className="sample-delay-workflow">
+                  {stages.map((stage) => (
+                    <article
+                      className={stage.delay ? "sample-delay-stage delay" : "sample-delay-stage"}
+                      key={stage.name}
+                    >
+                      <b>{stage.name}</b>
+                      <span>시간 {stage.time}</span>
+                      <span>경과 {stage.elapsed}</span>
+                      {stage.delay && <strong>지연 상태</strong>}
+                    </article>
+                  ))}
+                </div>
+                {sampleDelaySummary && (
+                  <div className="sample-delay-summary">
+                    <b>경과 시간</b>
+                    <span>{sampleDelaySummary.elapsedMinutes}분</span>
+                    <b>허용 기준</b>
+                    <span>{sampleDelaySummary.allowedMinutes}분</span>
+                    <b>초과 시간</b>
+                    <span>{sampleDelaySummary.overageMinutes}분</span>
+                  </div>
+                )}
+                <ul className="sample-delay-durations">
+                  {stages.map((stage) => (
+                    <li key={stage.name}>
+                      {stage.name}: {stage.elapsed}
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            </>
+          )}
           <RelatedInfoAccordion detail={detail} loaded={detail?.alarm.id === alarm.id} />
         </div>
         <div className="drawer-footer">

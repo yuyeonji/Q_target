@@ -44,6 +44,14 @@ test("includes interactive demo controls in the client page", async () => {
   assert.match(source, /신규 케이스 등록/);
 });
 
+test("renders dashboard alarm trend bars from category-aware API data", async () => {
+  const source = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+
+  assert.match(source, /trendCategories/);
+  assert.match(source, /point\.category/);
+  assert.match(source, /chart-group/);
+});
+
 test("registers an alarm as a target without entering the action-plan flow", async () => {
   const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   const alarmDetails = page.match(/\{alarm &&[\s\S]*?\{actionPlan &&/)?.[0] ?? "";

@@ -28,7 +28,28 @@ test("dashboard aggregation applies period, factory, and product filters to KPI 
   assert.equal(response.kpi.closureRate, 50);
   assert.deepEqual(response.alerts.map((alert) => alert.id), ["a-1"]);
   assert.deepEqual(response.cases.map((item) => item.id), ["t-1"]);
-  assert.deepEqual(response.chartData.alertTrend, [{ date: "2026-08-10", count: 1 }]);
+  assert.deepEqual(response.chartData.alertTrend, [{ date: "2026-08-10", category: "delay", count: 1 }]);
+});
+
+test("dashboard trend groups matching alarm history by date and category", async () => {
+  const { buildDashboardResponse } = await import("../lib/dashboard.mjs");
+  const response = buildDashboardResponse({
+    filters: { period: "7d", factory: "all", productType: "all" },
+    now,
+    alarms: [
+      { id: "a-1", alarmCode: "AL-1", type: "검사접수 지연", line: "GNPT11", status: "심각", occurredAt: "2026-08-10T09:00:00Z", factory: "광양", productType: "NCM" },
+      { id: "a-2", alarmCode: "AL-2", type: "Vital Few 이상", line: "GNPT12", status: "검토중", occurredAt: "2026-08-10T12:00:00Z", factory: "광양", productType: "NCM" },
+      { id: "a-3", alarmCode: "AL-3", type: "검사접수 지연", line: "GNPT21", status: "신규", occurredAt: "2026-08-11T09:00:00Z", factory: "광양", productType: "NCM" },
+    ],
+    targets: [],
+    actionPlans: [],
+  });
+
+  assert.deepEqual(response.chartData.alertTrend, [
+    { date: "2026-08-10", category: "Vital Few 이상", count: 1 },
+    { date: "2026-08-10", category: "검사접수 지연", count: 1 },
+    { date: "2026-08-11", category: "검사접수 지연", count: 1 },
+  ]);
 });
 
 test("dashboard filters customers and alarm item names, and returns actual KPI notes and options", async () => {

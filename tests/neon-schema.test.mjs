@@ -169,6 +169,18 @@ test("records the generated migration as PostgreSQL metadata", async () => {
   }
 });
 
+test("registers the alarm detail migration in the Drizzle journal", async () => {
+  const journal = JSON.parse(await readFile(journalUrl, "utf8"));
+
+  assert.deepEqual(journal.entries.at(-1), {
+    idx: 8,
+    version: "7",
+    when: 1786700000000,
+    tag: "0008_alarm_detail_data",
+    breakpoints: true,
+  });
+});
+
 test("backfills display codes before enforcing their unique non-null constraints", async () => {
   const migration = await readFile(displayCodeMigrationUrl, "utf8");
 

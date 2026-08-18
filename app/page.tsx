@@ -2533,18 +2533,23 @@ function measurementAverage(measurements: AlarmDetailResponse["measurements"], d
   return (values.reduce((total, value) => total + value, 0) / values.length).toFixed(2);
 }
 
-function MeasurementBars({ measurements, emptyMessage }: { measurements: AlarmDetailResponse["measurements"]; emptyMessage: string }) {
+function MeasurementLineChart({ measurements, emptyMessage }: { measurements: AlarmDetailResponse["measurements"]; emptyMessage: string }) {
   const values = measurements.slice(-30).map((measurement) => Number(measurement.metricValue)).filter(Number.isFinite);
   if (!values.length) return <p>{emptyMessage}</p>;
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const range = max - min || 1;
+  const threshold = Number(measurements.at(-1)?.thresholdValue);
+  const domain = Number.isFinite(threshold) ? [...values, threshold] : values;
+  const chartMin = Math.min(...domain);
+  const chartMax = Math.max(...domain);
+  const chartRange = chartMax - chartMin || 1;
+  const pointY = (value: number) => 36 - ((value - chartMin) / chartRange) * 30;
+  const points = values.map((value, index) => `${(index / Math.max(values.length - 1, 1)) * 100},${pointY(value)}`).join(" ");
+  const thresholdY = Number.isFinite(threshold) ? pointY(threshold) : null;
   return (
-    <div className="bars" aria-label="최근 30개 측정 추이">
-      {values.map((value, index) => (
-        <i key={`${value}-${index}`} className="red" style={{ height: `${20 + ((value - min) / range) * 80}%` }} />
-      ))}
-    </div>
+    <svg className="measurement-line-chart" viewBox="0 0 100 40" preserveAspectRatio="none" role="img" aria-label="최근 30일 측정 추이">
+      {thresholdY !== null && <line className="measurement-threshold" x1="0" x2="100" y1={thresholdY} y2={thresholdY} />}
+      <polyline className="measurement-line" points={points} />
+      <circle className="measurement-latest" cx="100" cy={pointY(values.at(-1)!)} r="1.8" />
+    </svg>
   );
 }
 
@@ -2654,7 +2659,7 @@ function AlarmDrawer({
               </article>
               <article>
                 <b>최근 30일 추세</b>
-                <MeasurementBars measurements={measurements} emptyMessage={detailLoaded ? noDetailMessage : "-"} />
+                <MeasurementLineChart measurements={measurements} emptyMessage={detailLoaded ? noDetailMessage : "-"} />
               </article>
             </div>
           </section>

@@ -579,7 +579,11 @@ test("renders closed action plans as read-only and accepts concise real closure 
 });
 
 test("keeps alarm detail measurement cards evenly sized beside a 30-day trend", async () => {
+  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   const css = await readFile(new URL("../app/globals.css", import.meta.url), "utf8");
 
   assert.match(css, /\.measurements\{[^}]*grid-template-columns:\s*repeat\(3,minmax\(0,1fr\)\)/);
+  assert.match(page, /function MeasurementLineChart/);
+  assert.match(page, /<polyline/);
+  assert.match(page, /className="measurement-line-chart"/);
 });

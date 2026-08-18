@@ -8,6 +8,7 @@ const workerDbUrl = new URL("../db/worker.ts", import.meta.url);
 const journalUrl = new URL("../drizzle/meta/_journal.json", import.meta.url);
 const displayCodeMigrationUrl = new URL("../drizzle/0003_persist_demo_identifiers.sql", import.meta.url);
 const actionPlanClosureMigrationUrl = new URL("../drizzle/0007_action_plan_closure.sql", import.meta.url);
+const alarmDetailMigrationUrl = new URL("../drizzle/0008_alarm_detail_data.sql", import.meta.url);
 const d1RouteUrl = new URL("../examples/d1/app/api/notes/route.ts", import.meta.url);
 const d1DbUrl = new URL("../examples/d1/db/index.ts", import.meta.url);
 const seedUrl = new URL("../lib/seed.ts", import.meta.url);
@@ -93,6 +94,46 @@ test("defines unique tables for master rules and master codes", async () => {
   assert.match(schema, /export const masterCodes = pgTable\("master_codes"/);
   assert.match(schema, /uniqueIndex\("master_rules_rule_code_unique"/);
   assert.match(schema, /uniqueIndex\("master_codes_code_unique"/);
+});
+
+test("stores alarm detail, measurement, and attachment records for every demo alarm", async () => {
+  const [schema, migration, { developmentSeed }] = await Promise.all([
+    readFile(schemaUrl, "utf8"),
+    readFile(alarmDetailMigrationUrl, "utf8"),
+    import("../lib/seed.ts"),
+  ]);
+
+  assert.match(schema, /export const alarmDetails = pgTable\("alarm_details"/);
+  assert.match(schema, /export const alarmMeasurements = pgTable\("alarm_measurements"/);
+  assert.match(schema, /export const alarmAttachments = pgTable\("alarm_attachments"/);
+  assert.match(schema, /uniqueIndex\("alarm_details_alarm_id_unique"\)\.on\(table\.alarmId\)/);
+  for (const tableName of ["alarmDetails", "alarmMeasurements", "alarmAttachments"]) {
+    assert.match(
+      schema,
+      new RegExp(`export const ${tableName} = pgTable\\("[^"]+", \\{[\\s\\S]{0,250}alarmId: uuid\\("alarm_id"\\)\\.notNull\\(\\)\\.references\\(\\(\\) => alarms\\.id\\)`),
+    );
+  }
+  assert.match(migration, /CREATE TABLE "alarm_details"/);
+  assert.match(migration, /CREATE TABLE "alarm_measurements"/);
+  assert.match(migration, /CREATE TABLE "alarm_attachments"/);
+  assert.match(migration, /"alarm_details_alarm_id_unique"/);
+  assert.match(migration, /"alarm_measurements_alarm_metric_measured_unique"/);
+  assert.match(migration, /"alarm_attachments_alarm_file_unique"/);
+
+  for (const alarmId of [
+    "99198000-0000-4000-8000-000000000001",
+    "99201000-0000-4000-8000-000000000001",
+    "99202000-0000-4000-8000-000000000001",
+    "99203000-0000-4000-8000-000000000001",
+  ]) {
+    assert.equal(developmentSeed.alarmDetails.filter((detail) => detail.alarmId === alarmId).length, 1);
+    assert.equal(developmentSeed.alarmMeasurements.filter((measurement) => measurement.alarmId === alarmId).length, 30);
+    assert.ok(developmentSeed.alarmAttachments.some((attachment) => attachment.alarmId === alarmId));
+  }
+  assert.deepEqual(
+    [...new Set(developmentSeed.alarmMeasurements.map((measurement) => measurement.metricName))],
+    ["Sample turnaround SLA", "Bore diameter CPK", "Winding defect rate", "End-of-line torque trend"],
+  );
 });
 
 test("creates the database client only from the server DATABASE_URL environment variable", async () => {

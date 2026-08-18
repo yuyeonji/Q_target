@@ -2,7 +2,9 @@ import {
   boolean,
   check,
   integer,
+  index,
   jsonb,
+  numeric,
   pgTable,
   text,
   timestamp,
@@ -58,6 +60,51 @@ export const actionPlans = pgTable("action_plans", {
   status: text("status").notNull(),
   createdAt: createdAt(),
 });
+
+export const alarmDetails = pgTable("alarm_details", {
+  id: id(),
+  alarmId: uuid("alarm_id").notNull().references(() => alarms.id),
+  equipment: text("equipment"),
+  productionLot: text("production_lot"),
+  measurementSummary: text("measurement_summary"),
+  currentValue: numeric("current_value", { precision: 12, scale: 4 }),
+  thresholdValue: numeric("threshold_value", { precision: 12, scale: 4 }),
+  affectedProductsCustomers: text("affected_products_customers"),
+  producedQuantity: integer("produced_quantity"),
+  inspectedQuantity: integer("inspected_quantity"),
+  nonconformingQuantity: integer("nonconforming_quantity"),
+  shippingStatus: text("shipping_status"),
+  inventoryQuantity: integer("inventory_quantity"),
+  relatedCtq: text("related_ctq"),
+  processFactor: text("process_factor"),
+  createdAt: createdAt(),
+}, (table) => [
+  uniqueIndex("alarm_details_alarm_id_unique").on(table.alarmId),
+]);
+
+export const alarmMeasurements = pgTable("alarm_measurements", {
+  id: id(),
+  alarmId: uuid("alarm_id").notNull().references(() => alarms.id),
+  metricName: text("metric_name").notNull(),
+  metricValue: numeric("metric_value", { precision: 12, scale: 4 }).notNull(),
+  thresholdValue: numeric("threshold_value", { precision: 12, scale: 4 }).notNull(),
+  measuredAt: timestamp("measured_at", { withTimezone: true }).notNull(),
+}, (table) => [
+  uniqueIndex("alarm_measurements_alarm_metric_measured_unique").on(table.alarmId, table.metricName, table.measuredAt),
+  index("alarm_measurements_alarm_measured_at_idx").on(table.alarmId, table.measuredAt),
+]);
+
+export const alarmAttachments = pgTable("alarm_attachments", {
+  id: id(),
+  alarmId: uuid("alarm_id").notNull().references(() => alarms.id),
+  fileName: text("file_name").notNull(),
+  fileUrl: text("file_url"),
+  fileSizeBytes: integer("file_size_bytes"),
+  createdAt: createdAt(),
+}, (table) => [
+  uniqueIndex("alarm_attachments_alarm_file_unique").on(table.alarmId, table.fileName),
+  index("alarm_attachments_alarm_created_at_idx").on(table.alarmId, table.createdAt),
+]);
 
 export const actionTasks = pgTable("action_tasks", {
   id: id(),

@@ -17,6 +17,27 @@ export function assertValidSampleDelayStages(stages: Array<{ stageName: string }
   }
 }
 
+const trendDates = [
+  "2020-01-15T08:00:00Z", "2020-04-15T08:00:00Z", "2020-07-15T08:00:00Z", "2020-10-15T08:00:00Z",
+  "2021-01-15T08:00:00Z", "2021-04-15T08:00:00Z", "2021-07-15T08:00:00Z", "2021-10-15T08:00:00Z",
+  "2022-01-15T08:00:00Z", "2022-04-15T08:00:00Z", "2022-07-15T08:00:00Z", "2022-10-15T08:00:00Z",
+  "2023-01-15T08:00:00Z", "2023-03-15T08:00:00Z", "2023-06-15T08:00:00Z", "2023-08-15T08:00:00Z",
+  "2023-09-28T08:00:00Z", "2023-09-29T08:00:00Z", "2023-09-30T08:00:00Z", "2023-10-01T08:00:00Z",
+  "2023-10-02T08:00:00Z", "2023-10-03T08:00:00Z", "2023-10-04T08:00:00Z", "2023-10-05T08:00:00Z",
+  "2023-10-06T08:00:00Z", "2023-10-07T08:00:00Z", "2023-10-08T08:00:00Z", "2023-10-09T08:00:00Z",
+  "2023-10-10T08:00:00Z", "2023-10-11T08:00:00Z",
+];
+
+function trendMeasurements(alarmId: string, metricName: string, thresholdValue: number, values: number[]) {
+  return trendDates.map((measuredAt, index) => ({
+    alarmId,
+    metricName,
+    metricValue: values[index].toFixed(4),
+    thresholdValue: thresholdValue.toFixed(4),
+    measuredAt: new Date(measuredAt),
+  }));
+}
+
 export const developmentSeed = {
   alarms: [
     {
@@ -147,6 +168,88 @@ export const developmentSeed = {
     { id: "99198000-0000-4000-8000-000000000008", alarmId: sampleDelayAlarmId, stageName: "시험 분석 완료", eventAt: new Date("2023-10-12T10:40:00Z"), elapsedMinutes: 90, allowedMinutes: 120, isDelayed: false },
     { id: "99198000-0000-4000-8000-000000000009", alarmId: sampleDelayAlarmId, stageName: "판정 지연", eventAt: new Date("2023-10-12T12:20:00Z"), elapsedMinutes: 100, allowedMinutes: 60, isDelayed: true },
   ],
+  alarmDetails: [
+    {
+      alarmId: sampleDelayAlarmId,
+      equipment: "Lab intake station L4-02",
+      productionLot: "BH-A1-231012-04",
+      measurementSummary: "Sample receipt exceeded the 60-minute service-level target.",
+      currentValue: "70.0000",
+      thresholdValue: "60.0000",
+      affectedProductsCustomers: "Bearing Housing A1 pilot batch / Northwind Motors",
+      producedQuantity: 480,
+      inspectedQuantity: 120,
+      nonconformingQuantity: 0,
+      shippingStatus: "Sampling hold released after laboratory review",
+      inventoryQuantity: 360,
+      relatedCtq: "Incoming sample turnaround time",
+      processFactor: "Courier handoff and laboratory intake queue",
+    },
+    {
+      alarmId: "99201000-0000-4000-8000-000000000001",
+      equipment: "CNC machining center M-04",
+      productionLot: "BH-A1-231012-02",
+      measurementSummary: "Bore diameter capability fell below the 1.33 CPK control limit.",
+      currentValue: "1.2800",
+      thresholdValue: "1.3300",
+      affectedProductsCustomers: "Bearing Housing A1 / Atlas Drive Systems",
+      producedQuantity: 960,
+      inspectedQuantity: 180,
+      nonconformingQuantity: 11,
+      shippingStatus: "Finished goods quarantined pending tool-offset verification",
+      inventoryQuantity: 780,
+      relatedCtq: "Bore diameter 48.000 +/- 0.020 mm",
+      processFactor: "Spindle thermal compensation and tool wear offset",
+    },
+    {
+      alarmId: "99202000-0000-4000-8000-000000000001",
+      equipment: "Stator winding cell A-02",
+      productionLot: "SC-B2-231012-07",
+      measurementSummary: "Winding insulation defects exceeded the 3.00 percent escalation limit.",
+      currentValue: "3.4000",
+      thresholdValue: "3.0000",
+      affectedProductsCustomers: "Stator Core B2 / Sejong E-Mobility",
+      producedQuantity: 720,
+      inspectedQuantity: 250,
+      nonconformingQuantity: 9,
+      shippingStatus: "Customer allocation held for 100 percent visual inspection",
+      inventoryQuantity: 470,
+      relatedCtq: "Winding insulation defect rate",
+      processFactor: "Coil insertion guide alignment and varnish cure time",
+    },
+    {
+      alarmId: "99203000-0000-4000-8000-000000000001",
+      equipment: "End-of-line torque tester T-01",
+      productionLot: "RA-C-231012-01",
+      measurementSummary: "End-of-line torque drift crossed the 75.00 Nm trend alert threshold.",
+      currentValue: "76.8000",
+      thresholdValue: "75.0000",
+      affectedProductsCustomers: "Rotor Assembly C / Pacific Motion",
+      producedQuantity: 640,
+      inspectedQuantity: 160,
+      nonconformingQuantity: 4,
+      shippingStatus: "Outbound pallet blocked until tester calibration is confirmed",
+      inventoryQuantity: 510,
+      relatedCtq: "Final fastening torque",
+      processFactor: "Torque transducer drift and fixture clamp repeatability",
+    },
+  ],
+  alarmMeasurements: [
+    ...trendMeasurements(sampleDelayAlarmId, "Sample turnaround SLA", 60, [48, 50, 47, 49, 51, 50, 52, 49, 50, 51, 53, 52, 50, 52, 54, 55, 57, 58, 60, 61, 63, 65, 66, 64, 67, 68, 69, 70, 68, 70]),
+    ...trendMeasurements("99201000-0000-4000-8000-000000000001", "Bore diameter CPK", 1.33, [1.58, 1.57, 1.56, 1.57, 1.55, 1.54, 1.53, 1.52, 1.51, 1.50, 1.49, 1.48, 1.47, 1.46, 1.45, 1.43, 1.41, 1.40, 1.39, 1.38, 1.37, 1.36, 1.35, 1.34, 1.33, 1.32, 1.31, 1.30, 1.29, 1.28]),
+    ...trendMeasurements("99202000-0000-4000-8000-000000000001", "Winding defect rate", 3, [1.20, 1.30, 1.25, 1.40, 1.45, 1.50, 1.55, 1.60, 1.65, 1.70, 1.80, 1.85, 1.90, 2.00, 2.10, 2.20, 2.35, 2.40, 2.50, 2.60, 2.70, 2.80, 2.85, 2.90, 3.00, 3.10, 3.20, 3.30, 3.35, 3.40]),
+    ...trendMeasurements("99203000-0000-4000-8000-000000000001", "End-of-line torque trend", 75, [69.20, 69.00, 69.40, 69.60, 69.80, 70.10, 70.30, 70.50, 70.70, 70.90, 71.20, 71.40, 71.70, 72.00, 72.30, 72.50, 72.80, 73.10, 73.30, 73.60, 73.80, 74.10, 74.30, 74.60, 74.90, 75.20, 75.50, 75.90, 76.30, 76.80]),
+  ],
+  alarmAttachments: [
+    { alarmId: sampleDelayAlarmId, fileName: "AL-99198-lab-intake-log.pdf", fileUrl: null, fileSizeBytes: 184320 },
+    { alarmId: sampleDelayAlarmId, fileName: "AL-99198-courier-handoff.csv", fileUrl: null, fileSizeBytes: 9216 },
+    { alarmId: "99201000-0000-4000-8000-000000000001", fileName: "AL-99201-bore-cpk-study.xlsx", fileUrl: null, fileSizeBytes: 248832 },
+    { alarmId: "99201000-0000-4000-8000-000000000001", fileName: "AL-99201-tool-offset-photo.jpg", fileUrl: null, fileSizeBytes: 376832 },
+    { alarmId: "99202000-0000-4000-8000-000000000001", fileName: "AL-99202-winding-inspection.pdf", fileUrl: null, fileSizeBytes: 194560 },
+    { alarmId: "99202000-0000-4000-8000-000000000001", fileName: "AL-99202-coil-guide-checklist.csv", fileUrl: null, fileSizeBytes: 12288 },
+    { alarmId: "99203000-0000-4000-8000-000000000001", fileName: "AL-99203-torque-calibration.pdf", fileUrl: null, fileSizeBytes: 231424 },
+    { alarmId: "99203000-0000-4000-8000-000000000001", fileName: "AL-99203-fixture-repeatability.csv", fileUrl: null, fileSizeBytes: 15360 },
+  ],
   actionPlans: [
     {
       id: sampleDelayActionPlanId,
@@ -184,6 +287,9 @@ type SeedTables = {
   masterRules?: { ruleCode: unknown };
   masterCodes?: { code: unknown };
   sampleDelayStages: { alarmId: unknown; stageName: unknown };
+  alarmDetails?: { alarmId: unknown };
+  alarmMeasurements?: { alarmId: unknown; metricName: unknown; measuredAt: unknown };
+  alarmAttachments?: { alarmId: unknown; fileName: unknown };
 };
 
 export async function seedDevelopmentData(database: { insert: Function; batch: Function }, tables: SeedTables) {
@@ -195,6 +301,42 @@ export async function seedDevelopmentData(database: { insert: Function; batch: F
       }),
       database.insert(tables.masterCodes).values(developmentSeed.masterCodes).onConflictDoNothing({
         target: tables.masterCodes.code,
+      }),
+    ]
+    : [];
+  const alarmDetailSeedStatements = tables.alarmDetails && tables.alarmMeasurements && tables.alarmAttachments
+    ? [
+      database.insert(tables.alarmDetails).values(developmentSeed.alarmDetails).onConflictDoUpdate({
+        target: tables.alarmDetails.alarmId,
+        set: {
+          equipment: sql`excluded.equipment`,
+          productionLot: sql`excluded.production_lot`,
+          measurementSummary: sql`excluded.measurement_summary`,
+          currentValue: sql`excluded.current_value`,
+          thresholdValue: sql`excluded.threshold_value`,
+          affectedProductsCustomers: sql`excluded.affected_products_customers`,
+          producedQuantity: sql`excluded.produced_quantity`,
+          inspectedQuantity: sql`excluded.inspected_quantity`,
+          nonconformingQuantity: sql`excluded.nonconforming_quantity`,
+          shippingStatus: sql`excluded.shipping_status`,
+          inventoryQuantity: sql`excluded.inventory_quantity`,
+          relatedCtq: sql`excluded.related_ctq`,
+          processFactor: sql`excluded.process_factor`,
+        },
+      }),
+      database.insert(tables.alarmMeasurements).values(developmentSeed.alarmMeasurements).onConflictDoUpdate({
+        target: [tables.alarmMeasurements.alarmId, tables.alarmMeasurements.metricName, tables.alarmMeasurements.measuredAt],
+        set: {
+          metricValue: sql`excluded.metric_value`,
+          thresholdValue: sql`excluded.threshold_value`,
+        },
+      }),
+      database.insert(tables.alarmAttachments).values(developmentSeed.alarmAttachments).onConflictDoUpdate({
+        target: [tables.alarmAttachments.alarmId, tables.alarmAttachments.fileName],
+        set: {
+          fileUrl: sql`excluded.file_url`,
+          fileSizeBytes: sql`excluded.file_size_bytes`,
+        },
       }),
     ]
     : [];
@@ -233,5 +375,6 @@ export async function seedDevelopmentData(database: { insert: Function; batch: F
       target: [tables.sampleDelayStages.alarmId, tables.sampleDelayStages.stageName],
     }),
     ...masterSeedStatements,
+    ...alarmDetailSeedStatements,
   ]);
 }

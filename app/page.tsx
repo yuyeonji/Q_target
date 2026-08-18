@@ -2607,7 +2607,7 @@ function AlarmDrawer({
                 유형<strong>{alarm.type}</strong>
               </p>
               <p>
-                제품/스펙<strong>{alarm.item}</strong>
+                제품<strong>{alarm.item}</strong>
               </p>
               <p>
                 공정/라인

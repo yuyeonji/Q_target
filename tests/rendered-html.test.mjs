@@ -443,6 +443,8 @@ test("loads selected alarm detail data and avoids fabricated drawer values", asy
   assert.match(page, /상세 데이터를 불러오지 못했습니다/);
   assert.match(alarmDrawer, /detail\?\.equipment/);
   assert.match(alarmDrawer, /detail\?\.productionLot/);
+  assert.match(alarmDrawer, /제품\s*<strong>\{alarm\.item\}/);
+  assert.doesNotMatch(alarmDrawer, /제품\/스펙/);
   assert.match(alarmDrawer, /검토 기한/);
   assert.match(alarmDrawer, /response\?\.alarm\.reviewDeadline/);
   assert.match(alarmDrawer, /!detailLoading && !detailError && detailLoaded && !detail/);

@@ -248,6 +248,8 @@ const actionPlanAnalysisDefaults = [
   "재발 방지를 위한 예방 조치를 기술하세요.",
 ];
 
+const trendCategoryColors = ["#4b4de2", "#c31518", "#0e7490", "#a16207", "#7c3aed", "#15803d"];
+
 const isMeaningful = (value: string) => {
   const trimmed = value.trim();
   return Boolean(trimmed) && !actionPlanAnalysisDefaults.includes(trimmed);
@@ -1066,7 +1068,11 @@ function Dashboard({
     return () => { active = false; };
   }, [period, factory, product]);
 
-  const trendMax = Math.max(...(dashboardData?.chartData.alertTrend.map((point) => point.count) ?? [1]));
+  const alertTrend = dashboardData?.chartData.alertTrend ?? [];
+  const trendCategories = [...new Set(alertTrend.map((point) => point.category))];
+  const trendDates = [...new Set(alertTrend.map((point) => point.date))];
+  const trendMax = Math.max(1, ...alertTrend.map((point) => point.count));
+  const trendCounts = new Map(alertTrend.map((point) => [`${point.date}\u0000${point.category}`, point.count]));
 
   return (
     <div className="dashboard-view">
@@ -1161,12 +1167,34 @@ function Dashboard({
             aria-label="카테고리별 알람 추세 차트"
           >
             <div className="chart">
-              {(dashboardData?.chartData.alertTrend ?? []).map((point, index) => (
-                <span key={point.date} className={index % 3 === 2 ? "pink" : undefined} style={{ height: `${Math.max(8, (point.count / trendMax) * 100)}%` }} />
+              {trendDates.map((date) => (
+                <div className="chart-group" key={date}>
+                  <div className="chart-bars">
+                    {trendCategories.map((category, index) => {
+                      const count = trendCounts.get(`${date}\u0000${category}`) ?? 0;
+                      return (
+                        <span
+                          aria-label={`${date} ${category} ${count}건`}
+                          className="chart-bar"
+                          key={category}
+                          style={{
+                            backgroundColor: trendCategoryColors[index % trendCategoryColors.length],
+                            height: count ? `${Math.max(8, (count / trendMax) * 100)}%` : "0%",
+                          }}
+                        />
+                      );
+                    })}
+                  </div>
+                  <small>{date.slice(5).replace("-", "/")}</small>
+                </div>
               ))}
             </div>
           </div>
-          <p className="legend">● 샘플 지연 · ● 공정능력 · ● 트렌드 이탈</p>
+          <p className="legend">
+            {trendCategories.map((category, index) => (
+              <span key={category} style={{ color: trendCategoryColors[index % trendCategoryColors.length] }}>● {category} </span>
+            ))}
+          </p>
         </article>
         <article className="card donut-card">
           <h3>

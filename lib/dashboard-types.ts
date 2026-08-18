@@ -30,7 +30,7 @@ export type DashboardResponse = {
   alerts: DashboardAlert[];
   cases: DashboardCase[];
   chartData: {
-    alertTrend: Array<{ date: string; count: number }>;
+    alertTrend: Array<{ date: string; category: string; count: number }>;
     targetDistribution: Array<{ status: string; count: number }>;
   };
 };
@@ -55,7 +55,8 @@ export function buildDashboardResponse(input: DashboardBuildInput): DashboardRes
   const targetDistribution = new Map<string, number>();
   for (const alert of alerts) {
     const date = new Date(alert.occurredAt).toISOString().slice(0, 10);
-    alertTrend.set(date, (alertTrend.get(date) ?? 0) + 1);
+    const key = `${date}\u0000${alert.type}`;
+    alertTrend.set(key, (alertTrend.get(key) ?? 0) + 1);
   }
   for (const target of input.targets) targetDistribution.set(target.status, (targetDistribution.get(target.status) ?? 0) + 1);
   return {
@@ -63,7 +64,12 @@ export function buildDashboardResponse(input: DashboardBuildInput): DashboardRes
     alerts: [...alerts].sort((a, b) => +new Date(b.occurredAt) - +new Date(a.occurredAt)).slice(0, 10),
     cases: input.targets.filter((target) => target.dueDate && new Date(target.dueDate) < input.now && !completeStatuses.has(target.status.toLowerCase())),
     chartData: {
-      alertTrend: [...alertTrend.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([date, count]) => ({ date, count })),
+      alertTrend: [...alertTrend.entries()]
+        .map(([key, count]) => {
+          const [date, category] = key.split("\u0000");
+          return { date, category, count };
+        })
+        .sort((a, b) => a.date.localeCompare(b.date) || a.category.localeCompare(b.category)),
       targetDistribution: [...targetDistribution.entries()].map(([status, count]) => ({ status, count })),
     },
   };

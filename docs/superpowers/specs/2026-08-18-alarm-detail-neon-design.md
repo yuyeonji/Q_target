@@ -76,9 +76,13 @@ visible retry message for detail data.
 ## Seed and Migration
 
 Drizzle migrations add the three new tables and their foreign keys/indexes.
-The existing first demo alarm receives the values currently visible in the
-drawer, including CPK history and one sample attachment metadata record.
-Other alarms remain valid without detail rows.
+Every seeded alarm receives a distinct, plausible detail record based on its
+alarm code, type, process, and line. CPK-drop records receive CPK trends,
+defect-rate records receive defect-oriented measurement trends, sample-delay
+records receive SLA-oriented measurements, and trend-alert records receive
+their own relevant process trend. Each gets distinct equipment, LOT, impact,
+and attachment metadata. This avoids one alarm's example data appearing in
+another alarm's drawer.
 
 The migration only creates new tables and constraints; it does not alter or
 delete existing production records. Applying it to the Neon production branch

@@ -480,16 +480,19 @@ export default function Home() {
   }, [alarm?.id, alarmDetailRetry]);
 
   const visibleAlarms = useMemo(
-    () =>
-      alarmItems.filter(
+    () => {
+      const registeredAlarmIds = new Set(targetItems.map((target) => target.sourceAlarmId));
+      return alarmItems.filter(
         (item) =>
           item.status !== "관리대상" &&
+          !registeredAlarmIds.has(item.id) &&
           `${item.item} ${item.code ?? item.id} ${item.type}`
             .toLowerCase()
             .includes(search.toLowerCase()) &&
           (alarmFilter === "전체" || item.status === alarmFilter),
-      ),
-    [search, alarmFilter, alarmItems],
+      );
+    },
+    [search, alarmFilter, alarmItems, targetItems],
   );
   const visibleTargets = useMemo(
     () =>

@@ -71,6 +71,15 @@ test("removes registered alarms from history without a registration status contr
   assert.match(page, /item\.status !== "관리대상"/);
 });
 
+test("excludes every source alarm that already has a managed target from alarm history", async () => {
+  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const visibleAlarms = page.match(/const visibleAlarms = useMemo\([\s\S]*?\n  \);/)?.[0] ?? "";
+
+  assert.match(visibleAlarms, /new Set\(targetItems\.map\(\(target\) => target\.sourceAlarmId\)\)/);
+  assert.match(visibleAlarms, /!registeredAlarmIds\.has\(item\.id\)/);
+  assert.match(visibleAlarms, /targetItems/);
+});
+
 test("maps persisted display codes while retaining UUID action IDs", async () => {
   const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   assert.match(page, /code:\s*item\.alarmCode/);

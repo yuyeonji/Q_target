@@ -410,7 +410,7 @@ test("uses an accessible related-information accordion and sample-delay workflow
   assert.doesNotMatch(alarmDrawer, /\btab\??:|\bsetTab\??:|const tabs =|drawer-tab-content/);
   assert.doesNotMatch(page, /drawer-tabs|drawer-tab-content|demo-attachment/);
   assert.doesNotMatch(css, /\.drawer-tabs|\.drawer-tab-content|\.demo-attachment/);
-  assert.match(page, /alarm\.type === "Sample Delay"\s*\?\s*\(?\s*<SampleDelayDrawer/);
+  assert.match(page, /alarm\.type === "Sample Delay"\s*\|\|\s*alarm\.type === "검사접수 지연"/);
   assert.match(page, /function SampleDelayDrawer/);
   assert.match(page, /경과 시간/);
   assert.match(page, /허용 기준/);

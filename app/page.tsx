@@ -865,7 +865,7 @@ export default function Home() {
         const matchingDetail = alarmDetail?.alarm.id === alarm.id ? alarmDetail : null;
         const matchingSampleDelayStages = matchingDetail ? sampleDelayStages : null;
         return (
-        (alarm.type === "Sample Delay" ? (
+        ((alarm.type === "Sample Delay" || alarm.type === "검사접수 지연") ? (
           <SampleDelayDrawer
             alarm={alarm}
             stages={matchingSampleDelayStages}

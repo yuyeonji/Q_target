@@ -51,6 +51,14 @@ test("maps persisted display codes while retaining UUID action IDs", async () =>
   assert.match(page, /id:\s*item\.id/);
 });
 
+test("shows master rule business codes instead of internal UUIDs", async () => {
+  const page = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
+  const ruleManagement = page.match(/function RuleManagement\([\s\S]*?\r?\n}\r?\n\r?\nfunction Kpi/)?.[0] ?? "";
+
+  assert.match(ruleManagement, /const displayRuleId = \(rule: Rule\) => rule\.code \?\? rule\.id/);
+  assert.doesNotMatch(ruleManagement, /<td>\{rule\.id\}<\/td>/);
+});
+
 test("persists every dashboard save action before reloading rendered data", async () => {
   const pageSource = await readFile(new URL("../app/page.tsx", import.meta.url), "utf8");
   const newCaseHandler = pageSource.match(/const createNewCase[\s\S]*?const openActionPlan/)?.[0] ?? "";

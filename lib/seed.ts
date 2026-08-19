@@ -121,9 +121,9 @@ export const developmentSeed = {
     },
   ],
   masterRules: [
-    { id: "99300000-0000-4000-8000-000000000001", ruleCode: "ALR-001", kind: "alarm", name: "CPK 하한 경고", scope: "전 공장 / 가공", threshold: "1.33 미만", active: true },
-    { id: "99300000-0000-4000-8000-000000000002", ruleCode: "ALR-002", kind: "alarm", name: "불량률 급증", scope: "조립 2라인", threshold: "3.0% 초과", active: true },
-    { id: "99300000-0000-4000-8000-000000000003", ruleCode: "ALR-003", kind: "alarm", name: "샘플링 지연", scope: "전체 제품", threshold: "30분 초과", active: false },
+    { id: "99300000-0000-4000-8000-000000000001", ruleCode: "QAL-RULE-CPK-001", kind: "alarm", name: "CPK 하한 경고", scope: "전 공장 / 가공", threshold: "1.33 미만", active: true },
+    { id: "99300000-0000-4000-8000-000000000002", ruleCode: "QAL-RULE-DEFECT-002", kind: "alarm", name: "불량률 급증", scope: "조립 2라인", threshold: "3.0% 초과", active: true },
+    { id: "99300000-0000-4000-8000-000000000003", ruleCode: "QAL-RULE-SAMPLING-003", kind: "alarm", name: "샘플링 지연", scope: "전체 제품", threshold: "30분 초과", active: false },
     { id: "99300000-0000-4000-8000-000000000004", ruleCode: "CVR-001", kind: "conversion", name: "심각 알람 자동 전환", scope: "심각 등급 알람", threshold: "즉시 전환", active: true },
     { id: "99300000-0000-4000-8000-000000000005", ruleCode: "CVR-002", kind: "conversion", name: "반복 알람 전환", scope: "동일 제품 / 동일 공정", threshold: "7일 내 3회", active: true },
     { id: "99300000-0000-4000-8000-000000000006", ruleCode: "CVR-003", kind: "conversion", name: "장기 미검토 전환", scope: "신규·검토중 알람", threshold: "24시간 경과", active: false },

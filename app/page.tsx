@@ -175,21 +175,24 @@ const initialTargets: Target[] = [
 ];
 const initialAlarmRules: Rule[] = [
   {
-    id: "ALR-001",
+    id: "local-alarm-rule-1",
+    code: "QAL-RULE-CPK-001",
     name: "CPK 하한 경고",
     scope: "전 공장 / 가공",
     threshold: "1.33 미만",
     active: true,
   },
   {
-    id: "ALR-002",
+    id: "local-alarm-rule-2",
+    code: "QAL-RULE-DEFECT-002",
     name: "불량률 급증",
     scope: "조립 2라인",
     threshold: "3.0% 초과",
     active: true,
   },
   {
-    id: "ALR-003",
+    id: "local-alarm-rule-3",
+    code: "QAL-RULE-SAMPLING-003",
     name: "샘플링 지연",
     scope: "전체 제품",
     threshold: "30분 초과",
@@ -1573,7 +1576,7 @@ function Master({
             idLabel="알람 규칙 ID"
             scopeLabel="감시 범위"
             thresholdLabel="알람 임계값"
-            idPrefix="ALR"
+            idPrefix="QAL-RULE"
             kind="alarm"
             filename="q-target-rules.csv"
             rules={alarmRules}
@@ -1988,6 +1991,7 @@ function RuleManagement({
     !draft.scope.trim() ? "적용 범위를 입력해 주세요." : null,
     !draft.threshold.trim() ? "임계값을 입력해 주세요." : null,
   ].filter((error): error is string => Boolean(error)) : [];
+  const displayRuleId = (rule: Rule) => rule.code ?? rule.id;
   const updateDraft = (field: keyof typeof draft, value: string) =>
     setDraft({ ...draft, [field]: value });
   const addRule = async (event: React.FormEvent) => {
@@ -1996,7 +2000,7 @@ function RuleManagement({
     setDraftAttempted(true);
     if (!draft.name.trim() || !draft.scope.trim() || !draft.threshold.trim()) return;
     const nextNumber =
-      Math.max(0, ...rules.map((rule) => Number((rule.code ?? rule.id).split("-")[1]) || 0)) +
+      Math.max(0, ...rules.map((rule) => Number((rule.code ?? rule.id).split("-").at(-1)) || 0)) +
       1;
     try {
       await createMasterRule({
@@ -2079,7 +2083,7 @@ function RuleManagement({
             downloadMasterCsv(
               [idLabel, "규칙명", scopeLabel, thresholdLabel, "상태"],
               rules.map((rule) => [
-                rule.id,
+                displayRuleId(rule),
                 rule.name,
                 rule.scope,
                 rule.threshold,
@@ -2151,7 +2155,7 @@ function RuleManagement({
             {rules.map((rule) =>
               editing?.id === rule.id ? (
                 <tr className="master-edit-row" key={rule.id}>
-                  <td>{rule.id}</td>
+                  <td>{displayRuleId(rule)}</td>
                   <td>
                     <input
                       aria-label="규칙명 수정"
@@ -2206,7 +2210,7 @@ function RuleManagement({
                 </tr>
               ) : (
                 <tr key={rule.id}>
-                  <td>{rule.id}</td>
+                  <td>{displayRuleId(rule)}</td>
                   <td>
                     <b>{rule.name}</b>
                   </td>

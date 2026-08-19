@@ -1,0 +1,8 @@
+UPDATE "master_rules"
+SET "rule_code" = CASE "rule_code"
+  WHEN 'ALR-001' THEN 'QAL-RULE-CPK-001'
+  WHEN 'ALR-002' THEN 'QAL-RULE-DEFECT-002'
+  WHEN 'ALR-003' THEN 'QAL-RULE-SAMPLING-003'
+  ELSE "rule_code"
+END
+WHERE "rule_code" IN ('ALR-001', 'ALR-002', 'ALR-003');

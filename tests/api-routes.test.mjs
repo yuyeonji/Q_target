@@ -591,7 +591,7 @@ test("development seed includes current-demo action plans and action tasks", asy
   assert.ok(developmentSeed.actionTasks.every((task) => task.actionPlanId === developmentSeed.actionPlans[0].id));
   assert.deepEqual(
     developmentSeed.masterRules.map((rule) => rule.ruleCode),
-    ["ALR-001", "ALR-002", "ALR-003", "CVR-001", "CVR-002", "CVR-003"],
+    ["QAL-RULE-CPK-001", "QAL-RULE-DEFECT-002", "QAL-RULE-SAMPLING-003", "CVR-001", "CVR-002", "CVR-003"],
   );
   assert.deepEqual(
     developmentSeed.masterCodes.map((code) => code.code),
